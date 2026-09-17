@@ -12,7 +12,7 @@ package.domain = org.nexus
 # (str) Source code where the application resides
 source.dir = .
 
-# (str) Source files where the let it go (let it be)
+# (str) Source files to include
 source.include_exts = py,png,jpg,kv,atlas
 
 # (list) Application requirements
@@ -28,7 +28,7 @@ orientation = portrait
 # Android specific
 #
 
-# (int) Target Android API, should be as high as possible.
+# (int) Target Android API
 android.api = 33
 
 # (int) Minimum API your APK will support
@@ -45,6 +45,10 @@ android.private_storage = True
 
 # (list) Permissions
 android.permissions = INTERNET
+
+# (bool) AUTOMATICAMENTE ACEITAR AS LICENÇAS DO ANDROID (A Solução!)
+android.accept_sdk_license = True
+
 
 [buildozer]
 
