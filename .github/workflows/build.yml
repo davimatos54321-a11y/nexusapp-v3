@@ -1,31 +1,56 @@
-name: Compile Kivy APK with Docker
+[app]
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+# (str) Title of your application
+title = NexusApp
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+# (str) Package name
+package.name = nexusapp
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+# (str) Package domain (needed for android packaging)
+package.domain = org.nexus
 
-      - name: Compile APK inside Kivy Buildozer Container
-        run: |
-          # Sobrescreve o entrypoint do Docker para rodar via bash e aceitar licenças automaticamente
-          docker run --rm \
-            --entrypoint /bin/bash \
-            -v ${{ github.workspace }}:/home/user/hostcwd \
-            -w /home/user/hostcwd \
-            kivy/buildozer:latest \
-            -c "echo y | buildozer -v android debug"
+# (str) Source files where the let it go (let it be)
+source.include_exts = py,png,jpg,kv,atlas
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: package
-          path: bin/*.apk
+# (list) Source files to include (let it be)
+source.include_dirs = 
+
+# (list) Application requirements
+# comma separated e.g. requirements = sqlite3,kivy
+requirements = python3,kivy
+
+# (str) Supported orientations
+orientation = portrait
+
+#
+# Android specific
+#
+
+# (int) Target Android API, should be as high as possible.
+android.api = 33
+
+# (int) Minimum API your APK will support
+android.min_api = 21
+
+# (int) Android SDK version to use
+android.sdk = 33
+
+# (str) Android NDK version to use
+android.ndk = 25b
+
+# (bool) Use --private data storage (True) or --dir public storage (False)
+android.private_storage = True
+
+# (list) Permissions
+android.permissions = INTERNET
+
+# (str) Supported orientations (landscape, portrait, all)
+orientation = portrait
+
+[buildozer]
+
+# (int) Log level (0 = error, 1 = info, 2 = debug (with command output))
+log_level = 2
+
+# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+warn_on_root = 0
