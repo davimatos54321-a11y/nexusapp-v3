@@ -1,4 +1,4 @@
-name: Compile Kivy APK - Native Enterprise v12
+name: Compile Kivy APK - Native Enterprise v13
 
 on:
   push:
@@ -28,6 +28,25 @@ jobs:
           libncurses5-dev libncursesw5-dev cmake \
           libffi-dev libssl-dev patch ant \
           libc6:i386 libstdc++6:i386 libz1:i386
+
+    - name: Pre-install Android SDK & Accept Licenses automatically
+      run: |
+        mkdir -p ~/.buildozer/android/platform/android-sdk
+        export ANDROID_HOME="/home/runner/.buildozer/android/platform/android-sdk"
+        
+        # Baixa o commandlinetools do Android para gerenciar pacotes e licenças
+        cd /tmp
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        unzip -q commandlinetools-linux-9477386_latest.zip
+        mkdir -p $ANDROID_HOME/cmdline-tools/latest
+        mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
+        
+        # Configura o PATH e aceita todas as licenças via script pipe
+        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+        yes | sdkmanager --licenses || true
+        
+        # Instala explicitamente a ferramenta que o buildozer procura para evitar o bloqueio
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;37.0.0" "build-tools;33.0.2"
 
     - name: Install Buildozer and Toolchain Dependencies
       run: |
