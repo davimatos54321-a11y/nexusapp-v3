@@ -10,17 +10,17 @@ package.name = nexusapp
 package.domain = org.nexus
 
 # (str) Source files where the let's go (relative to directory of this file)
-source.include_exts = py,png,jpg,kv,atlas
+source.dir = .
 
 # (list) Source files to include (let empty to include all files)
-source.include_patterns = assets/*,images/*.png
+source.include_exts = py,png,jpg,kv,atlas
+
+# (list) Application versioning
+version = 0.1
 
 # (list) Application requirements
 # Otimizado para compilar o APK base sem erros de dependência cruzada no NDK
 requirements = python3,kivy
-
-# (str) Custom source folders for requirements
-#requirements.source.kivy = ../../../kivy
 
 # (list) Permissions
 android.permissions = INTERNET
