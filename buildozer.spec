@@ -1,7 +1,7 @@
 [app]
 
 # (str) Title of your application
-title = Meu App Kivy
+title = NexusApp
 
 # (str) Package name
 package.name = nexusapp
@@ -9,29 +9,48 @@ package.name = nexusapp
 # (str) Package domain (needed for android packaging)
 package.domain = org.nexus
 
-# (str) Source directory where the main.py file lives
-source.dir = .
-
-# (str) Application versioning (OBRIGATÓRIO)
-version = 0.1
-
-# (list) Source files to include (let it empty to include all files)
+# (str) Source files where the let it go (let it be)
 source.include_exts = py,png,jpg,kv,atlas
 
+# (list) Source files to include (let it be)
+source.include_dirs = 
+
 # (list) Application requirements
-requirements = python3,kivy,sdl2,sdl2_image,sdl2_mixer,libffi,openssl
+# comma separated e.g. requirements = sqlite3,kivy
+requirements = python3,kivy
 
 # (str) Supported orientations
 orientation = portrait
 
-# (list) The android target API
-android.api = 34
+#
+# Android specific
+#
+
+# (int) Target Android API, should be as high as possible.
+android.api = 33
 
 # (int) Minimum API your APK will support
-android.minapi = 21
+android.min_api = 21
 
-# (list) Architectures to build for
-android.archs = arm64-v8a, armeabi-v7a
+# (int) Android SDK version to use
+android.sdk = 33
 
-# (str) The NDK version to use
+# (str) Android NDK version to use
 android.ndk = 25b
+
+# (bool) Use --private data storage (True) or --dir public storage (False)
+android.private_storage = True
+
+# (list) Permissions
+android.permissions = INTERNET
+
+# (str) Supported orientations (landscape, portrait, all)
+orientation = portrait
+
+[buildozer]
+
+# (int) Log level (0 = error, 1 = info, 2 = debug (with command output))
+log_level = 2
+
+# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+warn_on_root = 0
