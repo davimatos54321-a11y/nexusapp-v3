@@ -1,51 +1,56 @@
-[app]
+name: Compile Kivy APK
 
-# (str) Title of your application
-title = Nexus App
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-# (str) Package name
-package.name = nexusapp
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-# (str) Package domain (needed for android packaging)
-package.domain = org.nexus
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-# (str) Source files where the let's go (relative to directory of this file)
-source.dir = .
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-# (list) Source files to include (let empty to include all files)
-source.include_exts = py,png,jpg,kv,atlas
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            .buildozer
+            bin/
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
 
-# (list) Application versioning
-version = 1.0
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk python3-pip autoconf libtool \
+            pkg-config zlib1g-dev libncurses5-dev ncurses-dev libssl-dev \
+            libffi-dev libsqlite3-dev libbz2-dev
 
-# (list) Application requirements — Requisitos limpos e focados na engine base
-requirements = python3,sdl2
+      - name: Install Buildozer and Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade cython==0.29.36 buildozer pcpp
 
-# (list) Permissions
-android.permissions = INTERNET
+      - name: Run Buildozer Clean & Compilation
+        run: |
+          # Garante que o ambiente está totalmente limpo de resquícios antigos
+          buildozer clean
+          # Executa o build em modo verboso para depuração precisa
+          buildozer -v android debug
 
-# (int) Target Android API
-android.api = 34
-
-# (int) Minimum API your APK will support
-android.minapi = 21
-
-# (str) Android NDK version — Ajustado para 25b (versão de estabilidade comprovada para o libffi/tramp.c)
-android.ndk = 25b
-
-# (bool) Use --private data storage (True) or --public storage (False)
-android.private_storage = True
-
-# (str) Android arch to build for
-android.architectures = arm64-v8a, armeabi-v7a
-
-# (str) The format used to package the app for release/debug (aab or apk)
-android.packagetypes = apk
-
-[buildozer]
-
-# (int) Log level (0 = error only, 1 = info, 2 = debug)
-log_level = 2
-
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
-warn_on_root = 1
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: bin/*.apk
