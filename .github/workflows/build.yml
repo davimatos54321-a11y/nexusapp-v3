@@ -59,6 +59,8 @@ jobs:
           pip install -e .
 
       - name: Execute Robust Native Build
+        env:
+          ACLOCAL: aclocal -I /usr/share/aclocal
         run: |
           p4a create \
             --bootstrap=sdl2 \
