@@ -1,144 +1,73 @@
-name: Autonomous Scientific Kivy APK Pipeline with AI & Quantum Validation
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-
-jobs:
-  scientific-autonomous-build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python Environment
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Provision System Dependencies & Toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            autoconf \
-            automake \
-            libtool \
-            libltdl-dev \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libffi-dev \
-            libssl-dev
-
-      - name: Configure Java JDK 17 Runtime
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Install Android SDK & Target 34
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34 build-tools;34.0.0'
-          accept-android-sdk-licenses: true
-
-      - name: Install Core Packaging & Quantum Libraries
-        run: |
-          python -m pip install --upgrade pip
-          pip install Cython==3.0.10 virtualenv requests google-genai qiskit qiskit-ibm-runtime
-
-      - name: Setup Python-for-Android Native Ecosystem
-        run: |
-          git clone https://github.com/kivy/python-for-android.git
-          cd python-for-android
-          pip install -e .
-
-      - name: Execute Quantum Verification & Robust Native Build
-        env:
-          ACLOCAL: aclocal -I /usr/share/aclocal
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          IBM_QUANTUM_TOKEN: ${{ secrets.IBM_QUANTUM_TOKEN }}
-        run: |
-          python3 - << 'EOF'
-          import subprocess
-          import sys
-          import os
-
-          print("--- VERIFICANDO CONEXÃO COM QUANTUM COMPUTING (IBM) ---")
-          ibm_token = os.environ.get("IBM_QUANTUM_TOKEN")
-          if ibm_token:
-              print("Token da IBM Quantum detectado com sucesso!")
-              try:
-                  from qiskit_ibm_runtime import QiskitRuntimeService
-                  # Validação básica de inicialização do serviço se desejado
-                  print("Ambiente Qiskit configurado e pronto para testes quânticos.")
-              except Exception as e:
-                  print(f"Aviso no carregamento do Qiskit: {e}")
-          else:
-              print("Nenhum token da IBM Quantum configurado nas Secrets (opcional).")
-
-          build_command = [
-              "p4a", "create",
-              "--bootstrap=sdl2",
-              "--requirements=python3,kivy",
-              "--arch=arm64-v8a",
-              "--package=org.nexus.nexusapp",
-              "--name=NexusApp",
-              "--version=0.1",
-              "--dest-dir=./bin",
-              "--android-api=34",
-              "--ndk-version=26b",
-              "--accept-sdk-licenses"
-          ]
-
-          print("--- INICIANDO BUILD NATIVO COM AGENTE AUTÔNOMO ---")
-          result = subprocess.run(build_command, capture_output=True, text=True)
-
-          if result.returncode == 0:
-              print("Build concluído com sucesso!")
-              print(result.stdout)
-              sys.exit(0)
-          else:
-              print("--- ERRO DETECTADO NO BUILD ---")
-              print(result.stderr[-2000:])
-              
-              api_key = os.environ.get("GEMINI_API_KEY")
-              if not api_key:
-                  print("Aviso: GEMINI_API_KEY não encontrada.")
-                  sys.exit(result.returncode)
-
-              print("Acionando o agente autônomo Gemini para diagnóstico e análise...")
-              try:
-                  from google import genai
-                  client = genai.Client(api_key=api_key)
-                  
-                  prompt = f"""
-                  O seguinte build do python-for-android (Kivy) falhou com o erro abaixo.
-                  Forneça um diagnóstico curto e preciso do que causou o erro de compilação:
-                  
-                  {result.stderr[-2000:]}
-                  """
-                  
-                  response = client.models.generate_content(
-                      model='gemini-2.5-flash',
-                      contents=prompt,
-                  )
-                  print("\n--- DIAGNÓSTICO DO AGENTE INTELIGENTE ---")
-                  print(response.text)
-              except Exception as e:
-                  print(f"Erro ao conectar com a IA: {e}")
-
-              sys.exit(result.returncode)
-          EOF
-
-      - name: Upload Verified APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexus-apk-certified-artifact
-          path: bin/*.apk
+name: Autonomous Scientific Kivy APK Pipeline
+​on:
+push:
+branches: [ main ]
+workflow_dispatch:
+​jobs:
+scientific-autonomous-build:
+runs-on: ubuntu-latest
+​steps:
+- name: Checkout Repository
+uses: actions/checkout@v4
+​- name: Set up Python Environment
+uses: actions/setup-python@v5
+with:
+python-version: '3.10'
+​- name: Provision System Dependencies & Toolchain
+run: |
+sudo apt-get update
+sudo apt-get install -y 
+git 
+zip 
+unzip 
+autoconf 
+libtool 
+pkg-config 
+zlib1g-dev 
+libncurses5-dev 
+libncursesw5-dev 
+libffi-dev 
+libssl-dev
+​- name: Configure Java JDK 17 Runtime
+uses: actions/setup-java@v4
+with:
+distribution: 'temurin'
+java-version: '17'
+​- name: Install Android SDK & Target 33
+uses: android-actions/setup-android@v3
+with:
+api-level: 33
+build-tools-version: '33.0.2'
+​- name: Install Core Packaging Libraries & Quantum SDKs
+run: |
+python -m pip install --upgrade pip
+pip install Cython==0.29.36 virtualenv requests qiskit qiskit-ibm-runtime google-generativeai
+​- name: Setup Python-for-Android Native Ecosystem
+run: |
+git clone https://github.com/kivy/python-for-android.git
+cd python-for-android
+pip install -e .
+​- name: Execute Quantum Verification & Robust Native Build
+run: |
+p4a create 
+--bootstrap=sdl2 
+--requirements=python3,kivy,requests 
+--arch=arm64-v8a 
+--package=org.nexus.quantumapp 
+--name="NexusQuantum" 
+--version=0.1 
+--dest-dir=./bin 
+--android-api=33 
+--ndk-version=25b 
+--accept-sdk-licenses
+​- name: Locate and Secure APK Output
+run: |
+echo "Procurando arquivos APK gerados..."
+find . -name ".apk"
+mkdir -p final_apk
+find . -name ".apk" -exec cp {} final_apk/ ;
+​- name: Upload Verified APK Artifact
+uses: actions/upload-artifact@v4
+with:
+name: nexus-apk-certified-artifact
+path: final_apk/*.apk
