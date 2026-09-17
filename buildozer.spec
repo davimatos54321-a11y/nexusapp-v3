@@ -9,14 +9,17 @@ package.name = nexusapp
 # (str) Package domain (needed for android packaging)
 package.domain = org.nexus
 
+# (str) Source code where the application resides
+source.dir = .
+
 # (str) Source files where the let it go (let it be)
 source.include_exts = py,png,jpg,kv,atlas
 
-# (list) Source files to include (let it be)
-source.include_dirs = 
-
 # (list) Application requirements
 requirements = python3,kivy
+
+# (str) Version of your application
+version = 0.1
 
 # (str) Supported orientations
 orientation = portrait
