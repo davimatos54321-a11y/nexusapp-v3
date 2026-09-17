@@ -1,4 +1,4 @@
-name: Compile Kivy APK - Enterprise Grade v5
+name: Compile Kivy APK - Enterprise Grade v9
 
 on:
   push:
@@ -18,15 +18,15 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Clear and Isolate Cache v5
+    - name: Clear and Isolate Cache v9
       uses: actions/cache@v4
       with:
         path: |
           .buildozer
           ~/.buildozer
-        key: buildozer-cache-v5-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-cache-v9-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          buildozer-cache-v5-
+          buildozer-cache-v9-
 
     - name: Prepare Host Dependencies and 32-bit Architecture Support
       run: |
@@ -45,17 +45,16 @@ jobs:
         cd ~/.buildozer/android/platform
         echo "Downloading Android NDK r25b..."
         wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-        echo "Unpacking NDK..."
         unzip -q android-ndk-r25b-linux.zip
         rm android-ndk-r25b-linux.zip
-        echo "NDK setup complete."
+        mkdir -p android-sdk
 
     - name: Install Stable Toolchain Components
       run: |
         python3 -m pip install --upgrade pip
         python3 -m pip install "setuptools<66.0.0" "cython<3.0.0" "buildozer==1.5.0"
 
-    - name: Execute Buildozer with Pre-installed Environment
+    - name: Execute Buildozer with Clean State
       env:
         IBM_API_KEY: ${{ secrets.IBM_API_KEY }}
       run: |
