@@ -34,3 +34,9 @@ fullscreen = 0
 
 # (bool) Skip android SDK license confirmation
 android.accept_sdk_license = True
+
+# (str) Android NDK version to use
+android.ndk = 25b
+
+# (int) Target Android API, should be as high as possible.
+android.api = 33
