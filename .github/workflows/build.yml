@@ -1,4 +1,4 @@
-name: Compile Kivy APK - Native Enterprise v15
+name: Compile Kivy APK - Native Enterprise v16
 
 on:
   push:
@@ -29,27 +29,26 @@ jobs:
           libffi-dev libssl-dev patch ant \
           libc6:i386 libstdc++6:i386 libz1:i386
 
-    - name: Pre-install Android SDK & Accept Licenses automatically
+    - name: Pre-install Android SDK, Licenses & Dual Path Bridge
       run: |
         export ANDROID_HOME="/home/runner/.buildozer/android/platform/android-sdk"
         
-        # Cria a estrutura exata exigida pelo commandlinetools moderno
+        # Cria a estrutura moderna exigida pelo Google
         mkdir -p $ANDROID_HOME/cmdline-tools/latest
         
         cd /tmp
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
         unzip -q commandlinetools-linux-9477386_latest.zip
         
-        # Move os arquivos para dentro da pasta 'latest' correta
+        # Move para a pasta 'latest'
         mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
         
-        # Configura o PATH apontando para a pasta 'latest/bin'
+        # CRUCIAL: Cria a ponte (link simbólico) para a pasta 'tools' antiga que o Buildozer procura rigidamente
+        ln -s $ANDROID_HOME/cmdline-tools/latest $ANDROID_HOME/tools
+        
+        # Configura o PATH e aceita as licenças automaticamente
         export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-        
-        # Aceita as licenças automaticamente de forma segura
         yes | sdkmanager --licenses || true
-        
-        # Instala as ferramentas essenciais para o Buildozer não precisar baixar do zero
         sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
     - name: Install Buildozer and Toolchain Dependencies
