@@ -17,10 +17,11 @@ jobs:
       - name: Compile APK inside Kivy Buildozer Container
         run: |
           docker run --rm \
+            --entrypoint /usr/local/bin/buildozer \
             -v ${{ github.workspace }}:/home/user/hostcwd \
             -w /home/user/hostcwd \
             kivy/buildozer:latest \
-            buildozer -v android debug
+            -v android debug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
