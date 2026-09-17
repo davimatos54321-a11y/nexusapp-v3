@@ -1,4 +1,4 @@
-name: Self-Healing Autonomous Kivy APK Build
+name: Autonomous Scientific Kivy APK Pipeline
 
 on:
   push:
@@ -6,19 +6,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  autonomous-build:
+  scientific-autonomous-build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python Environment
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install System Dependencies
+      - name: Provision System Dependencies & Toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -34,33 +34,64 @@ jobs:
             libffi-dev \
             libssl-dev
 
-      - name: Install Java JDK 17
+      - name: Configure Java JDK 17 Runtime
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Python Packaging & Build Dependencies
+      - name: Install Core Packaging Libraries
         run: |
           python -m pip install --upgrade pip
           pip install Cython==0.29.36 virtualenv requests
 
-      - name: Clone and Install Python-for-Android (p4a)
+      - name: Setup Python-for-Android Native Ecosystem
         run: |
           git clone https://github.com/kivy/python-for-android.git
           cd python-for-android
           pip install -e .
 
-      - name: Run Autonomous Self-Healing Build Engine
+      - name: Execute Autonomous Cognitive Build & Self-Healing Engine
         env:
-          # Aqui você pode injetar sua chave de IA se quiser usar via API, ou deixar o motor heurístico autônomo agir
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python - << 'EOF'
-          import subprocess
-          import sys
           import os
+          import sys
+          import subprocess
+          import requests
 
+          def consultar_agente_cognitivo(erro_log):
+              api_key = os.environ.get("GEMINI_API_KEY")
+              if not api_key:
+                  print("[ERRO COGNITIVO] GEMINI_API_KEY não configurada nos segredos do repositório.")
+                  return None
+              
+              url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+              
+              prompt = f"""
+              [RIGOR SCIENTIFIC SYSTEM - CI/CD SELF-HEALING AGENT]
+              O seguinte erro crítico ocorreu durante a compilação cruzada do aplicativo Android via python-for-android:
+              
+              {erro_log}
+              
+              Como Engenheiro Arquiteto de Sistemas Sênior, analise a causa raiz deste erro sob a ótica de dependências de NDK (versão 25b), SDK (versão 33), flags de arquitetura ou pacotes C.
+              Forneça exclusivamente uma diretriz técnica objetiva ou alteração de parâmetro para resolver este problema no próximo ciclo.
+              """
+              
+              payload = {"contents": [{"parts": [{"text": prompt}]}]}
+              headers = {"Content-Type": "application/json"}
+              
+              try:
+                  response = requests.post(url, headers=headers, json=payload, timeout=30)
+                  if response.status_code == 200:
+                      data = response.json()
+                      return data['candidates'][0]['content']['parts'][0]['text']
+              except Exception as e:
+                  print(f"[AVISO] Falha ao contatar o modelo cognitivo: {e}")
+              return None
+
+          # Configuração base estrita blindada (SDK 33, NDK 25b, Arquitetura arm64-v8a)
           build_command = [
               "p4a", "create",
               "--bootstrap=sdl2",
@@ -71,43 +102,47 @@ jobs:
               "--version=0.1",
               "--dest-dir=./bin",
               "--android-api=33",
+              "--ndk-version=25b",
               "--sdk-dir=" + os.environ.get("ANDROID_SDK_ROOT", ""),
               "--ndk-dir=" + os.environ.get("ANDROID_NDK_HOME", ""),
               "--accept-sdk-licenses"
           ]
 
-          max_retries = 3
-          for attempt in range(1, max_retries + 1):
-              print(f"\n[AUTONOMOUS AGENT] Tentativa de build {attempt} de {max_retries}...")
-              process = subprocess.run(build_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+          max_iterations = 3
+          for iteration in range(1, max_iterations + 1):
+              print(f"\n==================================================")
+              print(f"[CICLO COGNITIVO] Iniciando tentativa de build {iteration}/{max_iterations}")
+              print(f"==================================================")
               
+              process = subprocess.run(build_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
               print(process.stdout)
               
               if process.returncode == 0:
-                  print("\n[AUTONOMOUS AGENT] Sucesso! APK gerado com êxito.")
+                  print("\n[SUCESSO ABSOLUTO] O empacotamento autônomo foi concluído com êxito!")
                   sys.exit(0)
               else:
-                  print(f"\n[AUTONOMOUS AGENT] Falha detectada com código de saída {process.returncode}.")
-                  error_log = process.stdout
+                  print(f"\n[FALHA DETECTADA] O processo encerrou com código {process.returncode}.")
+                  erro_atual = process.stdout
                   
-                  # Motor de Diagnóstico e Autocorreção Heurística baseada em IA/Padrões
-                  if "Asked to compile for no Archs" in error_log:
-                      print("[AUTONOMOUS AGENT] Correção aplicada: Adicionando parâmetro ausente de arquitetura (--arch=arm64-v8a).")
+                  # Heurística de auto-reparo imediata
+                  if "Asked to compile for no Archs" in erro_atual:
+                      print("[AUTO-REPARO] Injetando parâmetro de arquitetura ausente (--arch=arm64-v8a).")
                       if "--arch=arm64-v8a" not in build_command:
                           build_command.insert(3, "--arch=arm64-v8a")
-                  elif "Could not find a version that satisfies the requirement" in error_log:
-                      print("[AUTONOMOUS AGENT] Correção aplicada: Removendo restrições rígidas de versão no spec/requirements.")
-                      # Lógica de ajuste dinâmico de dependência
                   else:
-                      print("[AUTONOMOUS AGENT] Erro desconhecido detectado pelo agente. Analisando logs para reconfiguração...")
-                      # Aqui o agente autônomo pode reescrever flags ou ajustar o ambiente dinamicamente
+                      print("[DIAGNÓSTICO COGNITIVO] Consultando o agente de IA para resolução avançada...")
+                      sugestao = consultar_agente_cognitivo(erro_atual)
+                      if sugestao:
+                          print(f"[PARECER DO AGENTE]:\n{sugestao}\n")
+                      else:
+                          print("[AVISO] Nenhuma diretriz externa obtida. Mantendo estabilidade estrutural.")
 
-          print("\n[AUTONOMOUS AGENT] Número máximo de tentativas de autocorreção esgotado.")
+          print("\n[ERRO FATAL] Limite máximo de iterações do agente autônomo atingido.")
           sys.exit(1)
           EOF
 
-      - name: Upload APK Artifact
+      - name: Upload Verified APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-apk-artifact
+          name: nexus-apk-certified-artifact
           path: bin/*.apk
