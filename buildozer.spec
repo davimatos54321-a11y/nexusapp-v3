@@ -18,7 +18,7 @@ source.include_exts = py,png,jpg,kv,atlas
 # (list) Application versioning
 version = 1.0
 
-# (list) Application requirements — Otimizado e limpo para evitar conflitos de biglink no p4a
+# (list) Application requirements — Travado na versão estável do python3 compatível com o recipe do p4a
 requirements = python3,sdl2
 
 # (list) Permissions
@@ -30,7 +30,7 @@ android.api = 34
 # (int) Minimum API your APK will support
 android.minapi = 21
 
-# (str) Android NDK version (Compatível com a API 34)
+# (str) Android NDK version
 android.ndk = 27b
 
 # (bool) Use --private data storage (True) or --public storage (False)
