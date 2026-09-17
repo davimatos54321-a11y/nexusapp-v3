@@ -9,22 +9,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: kivy/buildozer:latest
-      options: --user 1000:1000
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Configure Git Safe Directory
+      - name: Compile APK inside Kivy Buildozer Container
         run: |
-          git config --global --add safe.directory /__w/nexusapp/nexusapp
-          git config --global --add safe.directory /github/workspace
-
-      - name: Compile APK with Buildozer (Dockerized)
-        run: |
-          buildozer -v android debug
+          # Executa o contêiner Docker manualmente mapeando o diretório atual do projeto
+          docker run --rm \
+            -v ${{ github.workspace }}:/home/user/hostcwd \
+            -w /home/user/hostcwd \
+            kivy/buildozer:latest \
+            buildozer -v android debug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
