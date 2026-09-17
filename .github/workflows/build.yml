@@ -43,7 +43,7 @@ jobs:
         # Move para a pasta 'latest'
         mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
         
-        # CRUCIAL: Cria a ponte (link simbólico) para a pasta 'tools' antiga que o Buildozer procura rigidamente
+        # Cria a ponte (link simbólico) para a pasta 'tools' antiga que o Buildozer procura
         ln -s $ANDROID_HOME/cmdline-tools/latest $ANDROID_HOME/tools
         
         # Configura o PATH e aceita as licenças automaticamente
