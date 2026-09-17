@@ -42,9 +42,11 @@ jobs:
           pip install --upgrade pip
           pip install --upgrade "cython<3.0" buildozer pcpp
 
-      - name: Run Buildozer Clean & Compilation
+      - name: Clean Previous Build Artifacts & Compile APK
         run: |
-          buildozer clean
+          # Remove de forma limpa qualquer resquício ou cache anterior do buildozer
+          rm -rf .buildozer
+          # Executa o build completo em modo verboso para depuração
           buildozer -v android debug
 
       - name: Upload APK Artifact
