@@ -1,4 +1,4 @@
-name: Compile Kivy APK
+name: Compile Kivy APK with Docker
 
 on:
   push:
@@ -9,53 +9,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: kivy/buildozer:latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Cache Buildozer global directory
-        uses: actions/cache@v4
-        with:
-          path: |
-            .buildozer
-            bin/
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('*.py') }}
-          restore-keys: |
-            ${{ runner.os }}-buildozer-
-
-      - name: Install System Dependencies
+      - name: Fix Directory Permissions for Container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk python3-pip autoconf libtool \
-            pkg-config zlib1g-dev libncurses5-dev ncurses-dev libssl-dev \
-            libffi-dev libsqlite3-dev libbz2-dev
+          # Garante que o contêiner tenha permissão total de escrita no repositório
+          git config --global --add safe.directory /__w/nexusapp/nexusapp || true
+          chown -R 1000:1000 .
 
-      - name: Install Buildozer and Dependencies
+      - name: Compile APK with Buildozer (Dockerized)
         run: |
-          pip install --upgrade pip
-          pip install --upgrade "cython<3.0" buildozer pcpp
-
-      - name: Prepare Android SDK Environment & Compile APK
-        run: |
-          # Remove cache antigo para garantir estado limpo
-          rm -rf .buildozer
-
-          # Cria a estrutura de diretórios padrão do Android SDK exigida pelo Buildozer
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
-
-          # Injeta as licenças aceitas para evitar qualquer bloqueio
-          echo -e "\n24333f8a43b689427183317f3d40600469700558" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-
-          # Executa o build do Buildozer
+          # Executa o build de forma isolada e sem erros de sdkmanager
           buildozer -v android debug
 
       - name: Upload APK Artifact
