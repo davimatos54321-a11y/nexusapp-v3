@@ -30,8 +30,8 @@ jobs:
       - name: Install Android SDK & Target 33
         uses: android-actions/setup-android@v3
         with:
-          api-level: 33
-          build-tools-version: '33.0.2'
+          packages: 'platforms;android-33 build-tools;33.0.2'
+          accept-android-sdk-licenses: true
 
       - name: Install Core Packaging Libraries & Quantum SDKs
         run: python -m pip install --upgrade pip && pip install Cython==0.29.36 virtualenv requests qiskit qiskit-ibm-runtime google-generativeai
