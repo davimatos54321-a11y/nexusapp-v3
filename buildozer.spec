@@ -3,6 +3,9 @@
 # (str) Title of your application
 title = Nexus App
 
+# (str) Version of the application
+version = 0.1
+
 # (str) Package name
 package.name = nexusapp
 
