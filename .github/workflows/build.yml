@@ -42,19 +42,20 @@ jobs:
           pip install --upgrade pip
           pip install --upgrade "cython<3.0" buildozer pcpp
 
-      - name: Accept Android SDK Licenses & Compile APK
+      - name: Prepare Android SDK Environment & Compile APK
         run: |
-          # Remove resquícios anteriores de forma limpa
+          # Remove cache antigo para garantir estado limpo
           rm -rf .buildozer
-          
-          # Cria a estrutura de diretórios do Android SDK para injetar as licenças preventivamente
+
+          # Cria a estrutura de diretórios padrão do Android SDK exigida pelo Buildozer
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-          
-          # Aceita automaticamente os termos de licença do SDK do Android
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
+
+          # Injeta as licenças aceitas para evitar qualquer bloqueio
           echo -e "\n24333f8a43b689427183317f3d40600469700558" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
-          # Executa o build em modo verboso
+          # Executa o build do Buildozer
           buildozer -v android debug
 
       - name: Upload APK Artifact
