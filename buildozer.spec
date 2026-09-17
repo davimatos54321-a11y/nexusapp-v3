@@ -31,3 +31,6 @@ orientation = portrait
 
 # (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
+
+# (bool) Skip android SDK license confirmation
+android.accept_sdk_license = True
