@@ -16,12 +16,13 @@ jobs:
 
       - name: Compile APK inside Kivy Buildozer Container
         run: |
-          # Executa aceitando automaticamente as licenças do SDK e depois o build
+          # Sobrescreve o entrypoint do Docker para rodar via bash e aceitar licenças automaticamente
           docker run --rm \
+            --entrypoint /bin/bash \
             -v ${{ github.workspace }}:/home/user/hostcwd \
             -w /home/user/hostcwd \
             kivy/buildozer:latest \
-            bash -c "yes | buildozer -v android debug"
+            -c "echo y | buildozer -v android debug"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
