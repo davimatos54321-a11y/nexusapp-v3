@@ -17,10 +17,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Fix Workspace Permissions
+      - name: Configure Git Safe Directory
         run: |
-          sudo chown -R 1000:1000 $GITHUB_WORKSPACE || true
-          git config --global --add safe.directory /__w/nexusapp/nexusapp || true
+          git config --global --add safe.directory /__w/nexusapp/nexusapp
+          git config --global --add safe.directory /github/workspace
 
       - name: Compile APK with Buildozer (Dockerized)
         run: |
