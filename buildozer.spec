@@ -18,7 +18,7 @@ source.include_exts = py,png,jpg,kv,atlas
 # (list) Application versioning
 version = 1.0
 
-# (list) Application requirements — Travado na versão estável do python3 compatível com o recipe do p4a
+# (list) Application requirements — Requisitos limpos e focados na engine base
 requirements = python3,sdl2
 
 # (list) Permissions
@@ -30,8 +30,8 @@ android.api = 34
 # (int) Minimum API your APK will support
 android.minapi = 21
 
-# (str) Android NDK version
-android.ndk = 27b
+# (str) Android NDK version — Ajustado para 25b (versão de estabilidade comprovada para o libffi/tramp.c)
+android.ndk = 25b
 
 # (bool) Use --private data storage (True) or --public storage (False)
 android.private_storage = True
