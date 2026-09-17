@@ -1,69 +1,57 @@
-name: Compile Kivy APK - Native Enterprise v16
+name: Compile Kivy APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Prepare Host Environment & 32-bit Architecture
-      run: |
-        sudo dpkg --add-architecture i386
-        sudo apt-get update
-        sudo apt-get install -y \
-          git zip unzip openjdk-17-jdk python3-pip \
-          autoconf libtool pkg-config zlib1g-dev \
-          libncurses5-dev libncursesw5-dev cmake \
-          libffi-dev libssl-dev patch ant \
-          libc6:i386 libstdc++6:i386 libz1:i386
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            .buildozer
+            bin/
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
 
-    - name: Pre-install Android SDK, Licenses & Dual Path Bridge
-      run: |
-        export ANDROID_HOME="/home/runner/.buildozer/android/platform/android-sdk"
-        
-        # Cria a estrutura moderna exigida pelo Google
-        mkdir -p $ANDROID_HOME/cmdline-tools/latest
-        
-        cd /tmp
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip
-        
-        # Move para a pasta 'latest'
-        mv cmdline-tools/* $ANDROID_HOME/cmdline-tools/latest/
-        
-        # Cria a ponte (link simbólico) para a pasta 'tools' antiga que o Buildozer procura
-        ln -s $ANDROID_HOME/cmdline-tools/latest $ANDROID_HOME/tools
-        
-        # Configura o PATH e aceita as licenças automaticamente
-        export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-        yes | sdkmanager --licenses || true
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk python3-pip autoconf libtool \
+            pkg-config zlib1g-dev libncurses5-dev ncurses-dev libssl-dev \
+            libffi-dev libsqlite3-dev libbz2-dev
 
-    - name: Install Buildozer and Toolchain Dependencies
-      run: |
-        python3 -m pip install --upgrade pip
-        python3 -m pip install --upgrade setuptools cython buildozer
+      - name: Install Buildozer and Dependencies
+        run: |
+          pip install --upgrade pip
+          # Fixado no Cython < 3.0 (0.29.36) para evitar erros de macro e dependência no python-for-android
+          pip install --upgrade "cython<3.0" buildozer pcpp
 
-    - name: Run Buildozer Compilation
-      env:
-        IBM_API_KEY: ${{ secrets.IBM_API_KEY }}
-      run: |
-        buildozer -v android debug
+      - name: Run Buildozer Clean & Compilation
+        run: |
+          # Limpa resquícios e cache corrompido antes de iniciar
+          buildozer clean
+          # Executa o build em modo verboso para depuração
+          buildozer -v android debug
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: nexus-app-production-apk
-        path: bin/*.apk
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: bin/*.apk
