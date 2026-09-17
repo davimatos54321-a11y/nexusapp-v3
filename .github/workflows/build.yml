@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: kivy/buildozer:latest
+      # Executa o contêiner sob o usuário padrão do Kivy (evita o bloqueio de root)
+      options: --user 1000:1000
 
     steps:
       - name: Checkout Repository
@@ -18,13 +20,10 @@ jobs:
 
       - name: Fix Directory Permissions for Container
         run: |
-          # Garante que o contêiner tenha permissão total de escrita no repositório
           git config --global --add safe.directory /__w/nexusapp/nexusapp || true
-          chown -R 1000:1000 .
 
       - name: Compile APK with Buildozer (Dockerized)
         run: |
-          # Executa o build de forma isolada e sem erros de sdkmanager
           buildozer -v android debug
 
       - name: Upload APK Artifact
