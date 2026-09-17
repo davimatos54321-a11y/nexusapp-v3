@@ -1,36 +1,40 @@
-[app]
+name: Compile Kivy APK
 
-# (str) Title of your application
-title = Nexus App
+on:
+  push:
+    branches: [ main, master ]
 
-# (str) Version of the application
-version = 0.1
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-# (str) Package name
-package.name = nexusapp
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-# (str) Package domain (needed for android packaging)
-package.domain = org.nexus
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-# (list) Source files to include (let it be empty to include all files)
-source.dir = .
+    - name: Install Buildozer dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
 
-# (list) Source files to exclude (let it be empty to exclude nothing)
-source.exclude_exts = spec
+    - name: Install Buildozer and Cython
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install "cython<3.1" buildozer
 
-# (list) Application requirements
-# comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy
+    - name: Build with Buildozer
+      env:
+        IBM_API_KEY: ${{ secrets.IBM_API_KEY }}
+      run: |
+        buildozer -v android debug
 
-# (str) Supported orientations
-orientation = portrait
-
-#
-# Android specific
-#
-
-# (bool) Indicate if the application should be fullscreen or not
-fullscreen = 0
-
-# (bool) Skip android SDK license confirmation
-android.accept_sdk_license = True
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: nexus-bet-apk
+        path: bin/*.apk
