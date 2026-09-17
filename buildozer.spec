@@ -16,7 +16,6 @@ source.include_exts = py,png,jpg,kv,atlas
 source.include_dirs = 
 
 # (list) Application requirements
-# comma separated e.g. requirements = sqlite3,kivy
 requirements = python3,kivy
 
 # (str) Supported orientations
@@ -43,9 +42,6 @@ android.private_storage = True
 
 # (list) Permissions
 android.permissions = INTERNET
-
-# (str) Supported orientations (landscape, portrait, all)
-orientation = portrait
 
 [buildozer]
 
