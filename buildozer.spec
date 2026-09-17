@@ -1,56 +1,35 @@
-name: Compile Kivy APK
+[app]
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+# (str) Title of your application
+title = Meu App Kivy
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+# (str) Package name
+package.name = nexusapp
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+# (str) Package domain (needed for android packaging)
+package.domain = org.nexus
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+# (list) Source files to include (let it empty to include all files)
+source.include_exts = py,png,jpg,kv,atlas
 
-      - name: Cache Buildozer global directory
-        uses: actions/cache@v4
-        with:
-          path: |
-            .buildozer
-            bin/
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('*.py') }}
-          restore-keys: |
-            ${{ runner.os }}-buildozer-
+# (list) Application requirements
+# (Certifique-se de incluir as dependências do seu projeto aqui)
+requirements = python3,kivy,sdl2,sdl2_image,sdl2_mixer,libffi,openssl
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk python3-pip autoconf libtool \
-            pkg-config zlib1g-dev libncurses5-dev ncurses-dev libssl-dev \
-            libffi-dev libsqlite3-dev libbz2-dev
+# (str) Supported orientations
+orientation = portrait
 
-      - name: Install Buildozer and Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install --upgrade cython==0.29.36 buildozer pcpp
+# (list) The android target API, should be 34 for modern Google Play requirements
+android.api = 34
 
-      - name: Run Buildozer Clean & Compilation
-        run: |
-          # Garante que o ambiente está totalmente limpo de resquícios antigos
-          buildozer clean
-          # Executa o build em modo verboso para depuração precisa
-          buildozer -v android debug
+# (int) Minimum API your APK will support
+android.minapi = 21
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: package
-          path: bin/*.apk
+# (list) Architectures to build for
+android.archs = arm64-v8a, armeabi-v7a
+
+# (str) The NDK version to use. Fixado no 25b para estabilidade total do libffi/tramp.c
+android.ndk = 25b
+
+# (bool) Enable FULL autotools/cmake-based packages cleaning if needed
+# android.skip_update = False
