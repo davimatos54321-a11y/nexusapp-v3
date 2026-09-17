@@ -18,8 +18,8 @@ source.include_exts = py,png,jpg,kv,atlas
 # (list) Application versioning
 version = 1.0
 
-# (list) Application requirements
-requirements = python3,kivy
+# (list) Application requirements — Versão travada para evitar falhas no Cython/SDL2
+requirements = python3,kivy==2.3.0,sdl2
 
 # (list) Permissions
 android.permissions = INTERNET
@@ -30,7 +30,7 @@ android.api = 34
 # (int) Minimum API your APK will support
 android.minapi = 21
 
-# (str) Android NDK version — Atualizado para o padrão moderno 27b
+# (str) Android NDK version
 android.ndk = 27b
 
 # (bool) Use --private data storage (True) or --public storage (False)
