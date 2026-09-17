@@ -19,7 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
 
 # (list) Application requirements
-# Otimizado para compilar o APK base sem erros de dependência cruzada no NDK
+# Otimizado para compilar o APK base sem erros de dependência
 requirements = python3,kivy
 
 # (list) Permissions
@@ -31,8 +31,8 @@ android.api = 33
 # (int) Minimum API your APK will support.
 android.minapi = 21
 
-# (str) Android NDK version to use
-android.ndk = 23b
+# (str) Android NDK version to use (atualizado para atender à exigência >= 25 do Buildozer)
+android.ndk = 25b
 
 # (bool) Use --private data storage (True) or --public storage (False)
 android.private_storage = True
