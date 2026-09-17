@@ -18,8 +18,8 @@ source.include_exts = py,png,jpg,kv,atlas
 # (list) Application versioning
 version = 1.0
 
-# (list) Application requirements — Versão travada para evitar falhas no Cython/SDL2
-requirements = python3,kivy==2.3.0,sdl2
+# (list) Application requirements — Ajustado para usar o recipe padrão do Kivy e evitar erros de distribuição
+requirements = python3,kivy,sdl2
 
 # (list) Permissions
 android.permissions = INTERNET
