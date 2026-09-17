@@ -18,9 +18,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install AI Core & Automation Libraries
-        run: python -m pip install --upgrade pip && pip install google-generativeai requests Cython==0.29.36 virtualenv
-
       - name: Provision System Dependencies & Toolchain
         run: |
           sudo apt-get update
@@ -52,39 +49,39 @@ jobs:
           accept-android-sdk-licenses: true
 
       - name: Install Core Packaging Libraries & Quantum SDKs
-        run: python -m pip install --upgrade pip && pip install qiskit qiskit-ibm-runtime
+        run: python -m pip install --upgrade pip && pip install Cython==0.29.36 virtualenv requests qiskit qiskit-ibm-runtime google-generativeai
 
       - name: Setup Python-for-Android Native Ecosystem
-        run: git clone https://github.com/kivy/python-for-android.git && cd python-for-android && pip install -e .
-
-      - name: Execute Quantum Verification & Robust Native Build with AI Self-Healing
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python - << 'EOF'
-          import os
-          import subprocess
-          import google.generativeai as genai
+          git clone https://github.com/kivy/python-for-android.git
+          cd python-for-android
+          pip install -e .
 
-          api_key = os.environ.get("GEMINI_API_KEY")
-          if api_key:
-              genai.configure(api_key=api_key)
-              model = genai.GenerativeModel('gemini-1.5-flash')
-              print("🤖 Agente IA Gemini ativado para monitoramento e suporte ao build nativo!")
+      - name: Fix Autotools Macro Compatibility
+        run: |
+          libtoolize --force || true
+          autoreconf -fi || true
 
-          build_command = 'p4a create --bootstrap=sdl2 --requirements=python3,kivy,requests --arch=arm64-v8a --package=org.nexus.quantumapp --name="NexusQuantum" --version=0.1 --dest-dir=./bin --android-api=33 --ndk-version=25b --accept-sdk-licenses'
-          
-          result = subprocess.run(build_command, shell=True)
-          if result.returncode != 0:
-              print("⚠️ O build encontrou uma restrição de compilação. Analisando ambiente...")
-              # O agente garante a estabilidade de execução interceptando falhas estruturais
-              exit(result.returncode)
-          else:
-              print("✨ Build executado e validado com sucesso absoluto!")
-          EOF
+      - name: Execute Quantum Verification & Robust Native Build
+        run: |
+          p4a create \
+            --bootstrap=sdl2 \
+            --requirements=python3,kivy,requests \
+            --arch=arm64-v8a \
+            --package=org.nexus.quantumapp \
+            --name="NexusQuantum" \
+            --version=0.1 \
+            --dest-dir=./bin \
+            --android-api=33 \
+            --ndk-version=25b \
+            --accept-sdk-licenses
 
       - name: Locate and Secure APK Output
-        run: echo "Procurando arquivos APK gerados..." && mkdir -p final_apk && find . -name "*.apk" -exec cp {} final_apk/ \; && ls -la final_apk/
+        run: |
+          echo "Procurando arquivos APK gerados..."
+          mkdir -p final_apk
+          find . -name "*.apk" -exec cp {} final_apk/ \;
+          ls -la final_apk/
 
       - name: Upload Verified APK Artifact
         uses: actions/upload-artifact@v4
