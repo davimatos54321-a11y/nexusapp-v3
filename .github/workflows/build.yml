@@ -40,14 +40,11 @@ jobs:
       - name: Install Buildozer and Dependencies
         run: |
           pip install --upgrade pip
-          # Fixado no Cython < 3.0 (0.29.36) para evitar erros de macro e dependência no python-for-android
           pip install --upgrade "cython<3.0" buildozer pcpp
 
       - name: Run Buildozer Clean & Compilation
         run: |
-          # Limpa resquícios e cache corrompido antes de iniciar
           buildozer clean
-          # Executa o build em modo verboso para depuração
           buildozer -v android debug
 
       - name: Upload APK Artifact
