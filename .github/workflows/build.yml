@@ -1,4 +1,4 @@
-name: Compile Kivy APK - Enterprise Grade v3
+name: Compile Kivy APK - Enterprise Grade v4
 
 on:
   push:
@@ -18,15 +18,15 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Clear and Isolate Cache
+    - name: Clear and Isolate Cache v4
       uses: actions/cache@v4
       with:
         path: |
           .buildozer
           ~/.buildozer
-        key: buildozer-cache-v3-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-cache-v4-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          buildozer-cache-v3-
+          buildozer-cache-v4-
 
     - name: Prepare Host Dependencies and 32-bit Architecture Support
       run: |
@@ -39,16 +39,16 @@ jobs:
           libffi-dev libssl-dev patch \
           libc6:i386 libstdc++6:i386 libz1:i386
 
-    - name: Install Strict Toolchain and Cython
+    - name: Install Stable Toolchain Components
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install "cython<3.0.0" "buildozer==1.5.0"
+        python3 -m pip install "setuptools<66.0.0" "cython<3.0.0" "buildozer==1.5.0"
 
-    - name: Execute Buildozer with Maximum Verbosity
+    - name: Execute Buildozer with Clean State
       env:
         IBM_API_KEY: ${{ secrets.IBM_API_KEY }}
       run: |
-        buildozer --debug -v android debug
+        buildozer -v android debug
 
     - name: Upload Verified APK Artifact
       uses: actions/upload-artifact@v4
