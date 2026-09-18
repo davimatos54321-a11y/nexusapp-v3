@@ -75,8 +75,8 @@ jobs:
               genai.configure(api_key=api_key)
               print("🤖 Agente IA Gemini ativado: Modo Zero-Legacy, sh-fixed e Auto-Correção acionados!")
 
-          print("🔧 Limpando resíduos e aplicando patches modernos no Autotools...")
-          subprocess.run("libtoolize --force --copy || true", shell=True)
+          print("🔧 Corrigindo macros do Autotools e injetando patches do Libtool...")
+          subprocess.run("libtoolize --force --copy && autoreconf -ivf || true", shell=True)
           
           env = os.environ.copy()
           env["WERROR"] = "0"
