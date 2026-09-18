@@ -73,6 +73,9 @@ jobs:
           import subprocess
           import google.generativeai as genai
 
+          # Garante que a pasta final já existe antes de iniciar o build
+          os.makedirs("final_apk", exist_ok=True)
+
           api_key = os.environ.get("GEMINI_API_KEY")
           if api_key:
               genai.configure(api_key=api_key)
@@ -86,6 +89,7 @@ jobs:
           env["CPPFLAGS"] = "-w"
           env["AUTOCONF"] = "autoconf --warnings=none"
 
+          # Aponta o destino diretamente para a pasta final_apk criada
           build_command = (
               'p4a create '
               '--bootstrap=sdl2 '
@@ -94,7 +98,7 @@ jobs:
               '--package=org.nexus.quantumapp '
               '--name="NexusQuantum" '
               '--version=0.1 '
-              '--dest-dir=./bin '
+              '--dest-dir=./final_apk '
               '--android-api=33 '
               '--ndk-version=25b '
               '--accept-sdk-licenses'
@@ -115,21 +119,16 @@ jobs:
               print("✨ Compilação executada e validada com sucesso absoluto!")
           EOF
 
-      - name: Locate, Compact and Secure Certified APK Output
+      - name: Compact and Secure Certified APK Output
         run: |
-          echo "Varredura ampla buscando qualquer APK gerado no workspace..."
-          mkdir -p final_apk
-          find . -type f -name "*.apk" -exec cp {} final_apk/ \;
-          
-          # Se não achou na busca padrão, tenta listar o diretório bin explicitamente
-          ls -la ./bin || true
-          cp -f ./bin/*.apk final_apk/ 2>/dev/null || true
+          echo "Verificando se o APK foi salvo diretamente na pasta final..."
+          ls -la final_apk/
           
           if [ -z "$(ls -A final_apk/*.apk 2>/dev/null)" ]; then
-            echo "❌ ERRO CRÍTICO: Nenhum arquivo APK foi fisicamente encontrado. O build falhou!"
+            echo "❌ ERRO CRÍTICO: Nenhum arquivo APK foi encontrado na pasta final. O build falhou!"
             exit 1
           else
-            echo "✅ SUCESSO: APK localizado com sucesso! Compactando pacote..."
+            echo "✅ SUCESSO: APK localizado na pasta de destino! Compactando pacote..."
             cd final_apk
             zip -9 nexus-certified-release.zip *.apk
             ls -la
