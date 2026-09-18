@@ -88,8 +88,9 @@ jobs:
           env["CPPFLAGS"] = "-w"
           env["AUTOCONF"] = "autoconf --warnings=none"
 
+          # Alterado de 'create' para 'apk' para forçar o empacotamento completo via Gradle
           build_command = [
-              "p4a", "create",
+              "p4a", "apk",
               "--bootstrap=sdl2",
               "--requirements=python3,kivy,requests",
               "--arch=arm64-v8a",
@@ -130,7 +131,7 @@ jobs:
                   found_apk = True
 
           if not found_apk:
-              # Segunda tentativa buscando mais amplamente caso esteja em pastas ocultas
+              # Segunda tentativa buscando profundamente em diretórios de outputs do Gradle
               for apk_path in glob.glob("**/outputs/**/*.apk", recursive=True):
                   shutil.copy(apk_path, "final_apk/")
                   print(f"📦 APK recuperado via outputs de {apk_path} para final_apk/")
