@@ -1,4 +1,4 @@
-Name: Autonomous Scientific Kivy APK Pipeline
+name: Autonomous Scientific Kivy APK Pipeline
 
 on:
   push:
@@ -54,7 +54,6 @@ jobs:
       - name: Install Strict Compatible Packaging & Quantum Ecosystem
         run: |
           python -m pip install --upgrade pip
-          # Fixando o Cython compatível com o p4a e sh com restrição de versão para evitar quebra de pipe
           pip install "sh<2.0,>=1.10" Cython==0.29.36 virtualenv requests qiskit qiskit-ibm-runtime google-generativeai
 
       - name: Setup Latest Python-for-Android Native Ecosystem
@@ -80,7 +79,6 @@ jobs:
           print("🔧 Limpando resíduos e aplicando patches modernos no Autotools...")
           subprocess.run("libtoolize --force --copy || true", shell=True)
           
-          # Isola o ambiente contra avisos estritos de legado de bibliotecas C e ponteiros modernos do GCC
           env = os.environ.copy()
           env["WERROR"] = "0"
           env["CFLAGS"] = "-Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration -w"
@@ -116,14 +114,12 @@ jobs:
           mkdir -p final_apk
           find . -name "*.apk" -exec cp {} final_apk/ \;
           
-          # Checagem estrita anti-falso-positivo
           if [ -z "$(ls -A final_apk/*.apk 2>/dev/null)" ]; then
             echo "❌ ERRO CRÍTICO: Nenhum arquivo APK foi fisicamente encontrado. O build falhou!"
             exit 1
           else
             echo "✅ SUCESSO: APK localizado. Compactando pacote..."
             cd final_apk
-            # Compacta o APK em formato zip otimizado para economizar espaço e facilitar o download
             zip -9 nexus-certified-release.zip *.apk
             ls -la
           fi
