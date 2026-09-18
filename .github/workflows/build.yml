@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Provision Ultra-Modern System Toolchain
+      - name: Provision Robust Native Toolchain & Autotools Fixes
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -27,7 +27,9 @@ jobs:
             unzip \
             autoconf \
             automake \
+            autoconf-archive \
             libtool \
+            libltdl-dev \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
@@ -35,6 +37,7 @@ jobs:
             libffi-dev \
             libssl-dev \
             gettext \
+            autopoint \
             build-essential \
             openjdk-17-jdk
 
@@ -50,7 +53,7 @@ jobs:
           packages: 'platforms;android-33 build-tools;33.0.2'
           accept-android-sdk-licenses: true
 
-      - name: Install Strict Compatible Packaging & Quantum Ecosystem
+      - name: Install Python Packaging Ecosystem
         run: |
           python -m pip install --upgrade pip
           pip install "sh<2.0,>=1.10" Cython==0.29.36 virtualenv requests qiskit qiskit-ibm-runtime google-generativeai
@@ -75,12 +78,14 @@ jobs:
               genai.configure(api_key=api_key)
               print("🤖 Agente IA Gemini ativado: Modo Zero-Legacy e Auto-Correção acionados!")
 
-          print("🔧 Preparando ambiente de compilação limpo para o p4a...")
+          print("🔧 Preparando ambiente e flags de contorno para Autotools...")
           
           env = os.environ.copy()
           env["WERROR"] = "0"
           env["CFLAGS"] = "-Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration -w"
           env["CPPFLAGS"] = "-w"
+          # Força o autoconf a ignorar avisos estritos que causam exit status 1 nas receitas antigas
+          env["AUTOCONF"] = "autoconf --warnings=none"
 
           build_command = (
               'p4a create '
