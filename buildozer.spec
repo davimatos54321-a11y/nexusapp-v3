@@ -1,59 +1,92 @@
 [app]
 
 # (str) Title of your application
-title = NexusApp
+title = NexusQuantum
 
 # (str) Package name
-package.name = nexusapp
+package.name = nexusquantum
 
 # (str) Package domain (needed for android packaging)
 package.domain = org.nexus
 
-# (str) Source code where the application resides
-source.dir = .
-
-# (str) Source files to include
+# (list) Source files to include (let it empty to include all files)
 source.include_exts = py,png,jpg,kv,atlas
 
-# (list) Application requirements
-requirements = python3,kivy
+# (list) List of inclusion patterns relative to the root directory
+source.include_patterns = assets/*,images/*.png
 
-# (str) Version of your application
+# (list) Source files to exclude (let it empty to exclude all files)
+source.exclude_exts = spec
+
+# (list) List of directory to exclude from source files
+source.exclude_dirs = tests, bin, venv
+
+# (list) List of exclusions using pattern matching
+source.exclude_patterns = license,images/*~
+
+# (str) Application versioning
 version = 0.1
 
-# (str) Supported orientations
+# (list) Application requirements
+# Certifique-se de que o numpy está listado aqui para ativar a engine científica
+requirements = python3,kivy,numpy
+
+# (str) Custom source folders for requirements
+#requirements.source.kivy = ../../../kivy
+
+# (list) Permissions
+# (list) Supported orientations
 orientation = portrait
+
+# (list) List of service to declare
+#services = 
+
+#
+# OSX Specific
+#
 
 #
 # Android specific
 #
 
-# (int) Target Android API
-android.api = 33
+# (bool) Indicate if the application should be fullscreen or not
+fullscreen = 0
 
-# (int) Minimum API your APK will support
-android.min_api = 21
+# (string) Presplash background color
+#presplash.color = #FFFFFF
 
-# (int) Android SDK version to use
-android.sdk = 33
+# (list) List of extra java jar files to add
+#android.add_jars = foo.bar,bar.baz
 
-# (str) Android NDK version to use
-android.ndk = 25b
+# (list) List of Java files to add to the android project (classpath, sources)
+#android.add_src =
 
-# (bool) Use --private data storage (True) or --dir public storage (False)
-android.private_storage = True
+# (list) List of Client intents
+#android.intent_filters = 
 
-# (list) Permissions
-android.permissions = INTERNET
+# (str) Android AAR archive to add
+#android.add_aars =
 
-# (bool) AUTOMATICAMENTE ACEITAR AS LICENÇAS DO ANDROID (A Solução!)
-android.accept_sdk_license = True
+# (list) Gradle dependencies to add
+#android.add_gradle_dependencies =
 
+# (bool) Use AndroidX
+android.androidx = true
+
+# (str) The format used to package the app for release ('aab' or 'apk')
+android.package_format = apk
 
 [buildozer]
 
 # (int) Log level (0 = error, 1 = info, 2 = debug (with command output))
 log_level = 2
 
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
-warn_on_root = 0
+# (int) Display warning if buildozer is run as root (0 = False, 1 = C, 2 = Python)
+#warn_root = 1
+
+# (str) Path to build artifact, default to the root directory of the buildozer.spec
+#bin_dir = ./bin
+
+# (str) The internationalization support, boolean
+#android.api = 33
+#android.minapi = 21
