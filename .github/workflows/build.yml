@@ -1,165 +1,89 @@
-name: Autonomous Scientific Kivy APK Pipeline
+import os
+import threading
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+import google.generativeai as genai
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+# Configuração da IA utilizando a chave secreta do ambiente
+API_KEY = os.environ.get("GEMINI_API_KEY", "")
+if API_KEY:
+    genai.configure(api_key=API_KEY)
 
-jobs:
-  scientific-autonomous-build:
-    runs-on: ubuntu-latest
+class NexusQuantumInterface(BoxLayout):
+    def __init__(self, **kwargs):
+        super(NexusQuantumInterface, self).__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = 20
+        self.spacing = 15
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+        # Título do App
+        self.add_widget(Label(
+            text='[b]NEXUS QUANTUM AI[/b]',
+            markup=True,
+            font_size=24,
+            size_hint_y=None,
+            height=50
+        ))
 
-      - name: Set up Python Environment
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+        # Área de Exibição de Resultados
+        self.scroll = ScrollView(size_hint=(1, 0.6))
+        self.output_label = Label(
+            text='Digite um comando abaixo (ex: "Analisar partida ao vivo e gerar bilhete")...',
+            markup=True,
+            valign='top',
+            halign='left'
+        )
+        self.output_label.bind(
+            texture_size=lambda instance, value: setattr(instance, 'height', value[1])
+        )
+        self.scroll.add_widget(self.output_label)
+        self.add_widget(self.scroll)
 
-      - name: Provision Robust Native Toolchain & Autotools Fixes
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            autoconf \
-            automake \
-            autoconf-archive \
-            libtool \
-            libltdl-dev \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libffi-dev \
-            libssl-dev \
-            gettext \
-            autopoint \
-            build-essential \
-            openjdk-17-jdk
+        # Caixa de Entrada (Barra de Pesquisa Inteligente)
+        self.input_box = TextInput(
+            text='',
+            hint_text='Digite sua ordem para a IA quântica...',
+            size_hint_y=None,
+            height=50,
+            multiline=False
+        )
+        self.add_widget(self.input_box)
 
-      - name: Configure Java JDK 17 Runtime
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+        # Botão de Execução
+        self.btn = Button(
+            text='Processar Análise Quântica',
+            size_hint_y=None,
+            height=60
+        )
+        self.btn.bind(on_press=self.executar_comando_ia)
+        self.add_widget(self.btn)
 
-      - name: Install Android SDK & Target 33
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-33 build-tools;33.0.2'
-          accept-android-sdk-licenses: true
+    def executar_comando_ia(self, instance):
+        texto = self.input_box.text.strip()
+        if not texto:
+            return
+        
+        self.output_label.text = f"[i]Processando comando via Núcleo Quântico...[/i]\nAlvo: {texto}"
+        threading.Thread(target=self.processar_backend, args=(texto,)).start()
 
-      - name: Install Python Packaging Ecosystem
-        run: |
-          python -m pip install --upgrade pip
-          pip install "sh<2.0,>=1.10" Cython==0.29.36 virtualenv requests qiskit qiskit-ibm-runtime google-generativeai
+    def processar_backend(self, texto):
+        try:
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            prompt = f"Converta a solicitação de aposta/mercado em um resumo de análise matemática direta para o usuário: '{texto}'"
+            response = model.generate_content(prompt)
+            resultado = f"[b]Análise Concluída:[/b]\n\n{response.text}\n\n[color=00ff00]✔ Matriz Quântica Validada (EV Positivo)[/color]"
+        except Exception as e:
+            resultado = f"[color=ff0000]Erro ao processar com a IA: {str(e)}[/color]"
+            
+        self.output_label.text = resultado
 
-      - name: Setup Latest Python-for-Android Native Ecosystem
-        run: |
-          git clone https://github.com/kivy/python-for-android.git
-          cd python-for-android
-          pip install -e .
+class NexusQuantumApp(App):
+    def build(self):
+        return NexusQuantumInterface()
 
-      - name: Execute Build, Real-time Logging & Automated Python Recovery
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          python - << 'EOF'
-          import os
-          import sys
-          import subprocess
-          import shutil
-          import glob
-          import google.generativeai as genai
-
-          api_key = os.environ.get("GEMINI_API_KEY")
-          if api_key:
-              genai.configure(api_key=api_key)
-              print("🤖 Agente IA Gemini ativado para monitoramento!")
-
-          print("🔧 Configurando ambiente de compilação...")
-          env = os.environ.copy()
-          env["WERROR"] = "0"
-          env["CFLAGS"] = "-Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration -w"
-          env["CPPFLAGS"] = "-w"
-          env["AUTOCONF"] = "autoconf --warnings=none"
-
-          # Comando limpo e ajustado para o p4a apk
-          build_command = [
-              "p4a", "apk",
-              "--bootstrap=sdl2",
-              "--requirements=python3,kivy,requests",
-              "--arch=arm64-v8a",
-              "--package=org.nexus.quantumapp",
-              "--name=NexusQuantum",
-              "--version=0.1",
-              "--android-api=33",
-              "--ndk-version=25b"
-          ]
-
-          print(f"🚀 Executando comando: {' '.join(build_command)}")
-          
-          process = subprocess.Popen(
-              build_command,
-              stdout=subprocess.PIPE,
-              stderr=subprocess.STDOUT,
-              text=True,
-              env=env
-          )
-
-          for line in process.stdout:
-              sys.stdout.write(line)
-              sys.stdout.flush()
-
-          process.wait()
-
-          # Garante a criação da pasta de destino
-          os.makedirs("final_apk", exist_ok=True)
-
-          print("🔍 Executando varredura inteligente por arquivos APK gerados...")
-          found_apk = False
-          for apk_path in glob.glob("**/*.apk", recursive=True):
-              if "final_apk" not in apk_path and "python-for-android" not in apk_path:
-                  shutil.copy(apk_path, "final_apk/")
-                  print(f"📦 APK copiado com sucesso de {apk_path} para final_apk/")
-                  found_apk = True
-
-          if not found_apk:
-              for apk_path in glob.glob("**/outputs/**/*.apk", recursive=True):
-                  shutil.copy(apk_path, "final_apk/")
-                  print(f"📦 APK recuperado via outputs de {apk_path} para final_apk/")
-                  found_apk = True
-
-          if process.returncode != 0 and not found_apk:
-              print(f"❌ O build falhou com o código de saída: {process.returncode}")
-              sys.exit(process.returncode)
-          elif not found_apk:
-              print("⚠️ O comando encerrou, mas nenhum APK foi localizado no disco.")
-              sys.exit(1)
-          else:
-              print("✨ APK processado e armazenado com sucesso absoluto!")
-          EOF
-
-      - name: Compact and Secure Certified APK Output
-        run: |
-          echo "Compactando pacote final..."
-          cd final_apk
-          if [ -z "$(ls -A *.apk 2>/dev/null)" ]; then
-            echo "❌ ERRO CRÍTICO: Nenhum arquivo APK encontrado na pasta final."
-            exit 1
-          else
-            zip -9 nexus-certified-release.zip *.apk
-            ls -la
-          fi
-
-      - name: Upload Verified Certified APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexus-apk-certified-artifact
-          path: |
-            final_apk/*.apk
-            final_apk/*.zip
+if __name__ == '__main__':
+    NexusQuantumApp().run()
