@@ -15,7 +15,7 @@ source.include_exts = py,png,jpg,kv,atlas
 # (list) List of inclusion patterns relative to the root directory
 source.include_patterns = assets/*,images/*.png
 
-# (list) Source files to exclude (let it empty to exclude all files)
+# (list) Source files to exclude (let it empty to include all files)
 source.exclude_exts = spec
 
 # (list) List of directory to exclude from source files
@@ -28,13 +28,16 @@ source.exclude_patterns = license,images/*~
 version = 0.1
 
 # (list) Application requirements
-# Certifique-se de que o numpy está listado aqui para ativar a engine científica
-requirements = python3,kivy,numpy
+# Requisitos limpos para rodar o Kivy e o motor de requisições de rede sem travar o APK
+requirements = python3,kivy,requests,urllib3,certifi,idna,charset-normalizer
 
 # (str) Custom source folders for requirements
 #requirements.source.kivy = ../../../kivy
 
 # (list) Permissions
+# Liberado o acesso à rede para permitir as chamadas à API-Football
+android.permissions = INTERNET
+
 # (list) Supported orientations
 orientation = portrait
 
