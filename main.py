@@ -9,18 +9,20 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.graphics import Color, Rectangle
 
-# Verificação de motores nativos
+# Importações protegidas para evitar crash no arranque do Android
 try:
     import numpy as np
     NUMPY_DISPONIVEL = True
-except ImportError:
+except Exception:
     NUMPY_DISPONIVEL = False
 
+# Importação de voz segura
+STT_DISPONIVEL = False
 try:
     from plyer import stt
     STT_DISPONIVEL = True
-except ImportError:
-    STT_DISPONIVEL = False
+except Exception:
+    pass
 
 class NexusQuantumApp(App):
     def build(self):
@@ -31,7 +33,7 @@ class NexusQuantumApp(App):
         
         # Fundo quântico profissional (Deep Tech Blue)
         with root_layout.canvas.before:
-            Color(0.02, 0.05, 0.10, 1)  # #050D1A
+            Color(0.02, 0.05, 0.10, 1)
             self.bg_rect = Rectangle(size=root_layout.size, pos=root_layout.pos)
         root_layout.bind(size=self._update_bg, pos=self._update_bg)
         
@@ -39,7 +41,7 @@ class NexusQuantumApp(App):
         engine_status = "ONLINE ⚡" if NUMPY_DISPONIVEL else "LOCAL ⚠️"
         header_text = (
             f"[b][color=00F0FF]NEXUS QUANTUM AI[/color][/b]\n"
-            f"[size=11][color=8A99AD]KERNEL: v2.5 | ENGINE: {engine_status} | VOICE: ACTIVE[/color][/size]"
+            f"[size=11][color=8A99AD]KERNEL: v2.6 | ENGINE: {engine_status}[/color][/size]"
         )
         header = Label(
             text=header_text,
@@ -54,7 +56,7 @@ class NexusQuantumApp(App):
         
         # Área de Histórico / Terminal Quântico Rolável
         self.output_label = Label(
-            text="[color=00F0FF]>> [System]:[/color] Núcleo quântico inicializado com sucesso.\n[color=8A99AD]Selecione um módulo abaixo ou insira um comando de voz/texto.[/color]",
+            text="[color=00F0FF]>> [System]:[/color] Núcleo quântico inicializado com sucesso.\n[color=8A99AD]Selecione um módulo abaixo ou insira um comando.[/color]",
             markup=True,
             size_hint_y=None,
             halign='left',
@@ -70,8 +72,7 @@ class NexusQuantumApp(App):
         scroll.add_widget(self.output_label)
         root_layout.add_widget(scroll)
         
-        # Painel de Botões de Acesso Rápido (Design Tecnológico / Neon)
-        # Dividido em 2 linhas de botões para melhor ergonomia no telemóvel
+        # Painel de Botões de Acesso Rápido
         control_panel = BoxLayout(orientation='vertical', size_hint_y=None, height=95, spacing=8)
         
         # Linha 1 de Atalhos
@@ -106,7 +107,7 @@ class NexusQuantumApp(App):
         control_panel.add_widget(row2)
         root_layout.add_widget(control_panel)
         
-        # Caixa de Texto de Entrada Futurista
+        # Caixa de Texto de Entrada
         self.input_field = TextInput(
             text='',
             hint_text='Digite um comando, cálculo ou aposta...',
@@ -119,7 +120,7 @@ class NexusQuantumApp(App):
         )
         root_layout.add_widget(self.input_field)
         
-        # Botão de Execução Principal (Ciano Neon Dourado/Azul)
+        # Botão de Execução Principal
         btn_executar = Button(
             text='[b]PROCESSAR COMANDO QUÂNTICO[/b]',
             markup=True,
@@ -152,7 +153,7 @@ class NexusQuantumApp(App):
             except Exception as e:
                 self.output_label.text = f"[color=FF5555]>> [Error]:[/color] Falha no microfone: {str(e)}\n\n" + self.output_label.text
         else:
-            self.output_label.text = "[color=FF5555]>> [System]:[/color] Módulo de reconhecimento de voz indisponível.\n\n" + self.output_label.text
+            self.output_label.text = "[color=FF5555]>> [System]:[/color] Módulo de reconhecimento de voz indisponível neste modo.\n\n" + self.output_label.text
 
     def resultado_voz(self, resultat):
         if resultat:
@@ -194,9 +195,9 @@ class NexusQuantumApp(App):
             if comando.lower() == "ajuda":
                 saida = (
                     "[color=00F0FF]>> [Nexus Help]:[/color]\n"
-                    "1. Cálculo matemático direto (ex: 50 + 50, np.mean([...]))\n"
+                    "1. Cálculo matemático direto (ex: 50 + 50)\n"
                     "2. Análise de apostas (ex: aposta odds=1.90 prob=0.55)\n"
-                    "3. Use o botão 'Falar Voz' para comando por áudio."
+                    "3. Use o botão 'Falar Voz' se suportado."
                 )
             elif comando.lower().startswith("aposta"):
                 saida = self.calcular_aposta(comando)
@@ -208,7 +209,7 @@ class NexusQuantumApp(App):
                 except Exception:
                     resultado_local = {}
                     exec(comando, {"__builtins__": None}, {**contexto, **resultado_local})
-                    saida = f"[color=00F0FF]>> Input:[/color] {comando}\n[color=00FF99]Status:[/color] Executado com sucesso no kernel."
+                    saida = f"[color=00F0FF]>> Input:[/color] {comando}\n[color=00FF99]Status:[/color] Executado com sucesso."
                 
             self.output_label.text = saida + "\n\n" + "="*35 + "\n\n" + self.output_label.text
             self.input_field.text = ""
