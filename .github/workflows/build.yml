@@ -98,11 +98,16 @@ jobs:
           )
           
           print(f"🚀 Iniciando compilação nativa rigorosa: {build_command}")
-          result = subprocess.run(build_command, shell=True, env=env)
+          process = subprocess.run(build_command, shell=True, env=env, capture_output=True, text=True)
           
-          if result.returncode != 0:
+          print("STDOUT:")
+          print(process.stdout)
+          print("STDERR:")
+          print(process.stderr)
+          
+          if process.returncode != 0:
               print("⚠️ O agente detectou um bloqueio de compilação. Interrompendo para evitar falso positivo...")
-              exit(result.returncode)
+              exit(process.returncode)
           else:
               print("✨ Compilação executada e validada com sucesso absoluto!")
           EOF
