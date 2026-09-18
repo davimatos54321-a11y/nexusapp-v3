@@ -88,7 +88,7 @@ jobs:
           env["CPPFLAGS"] = "-w"
           env["AUTOCONF"] = "autoconf --warnings=none"
 
-          # Comando limpo sem argumentos inválidos para o p4a apk
+          # Comando limpo e ajustado para o p4a apk
           build_command = [
               "p4a", "apk",
               "--bootstrap=sdl2",
@@ -129,7 +129,6 @@ jobs:
                   found_apk = True
 
           if not found_apk:
-              # Segunda tentativa buscando profundamente em diretórios de outputs do Gradle
               for apk_path in glob.glob("**/outputs/**/*.apk", recursive=True):
                   shutil.copy(apk_path, "final_apk/")
                   print(f"📦 APK recuperado via outputs de {apk_path} para final_apk/")
