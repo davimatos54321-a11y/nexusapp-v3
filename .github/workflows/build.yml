@@ -84,7 +84,6 @@ jobs:
           env["WERROR"] = "0"
           env["CFLAGS"] = "-Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration -w"
           env["CPPFLAGS"] = "-w"
-          # Força o autoconf a ignorar avisos estritos que causam exit status 1 nas receitas antigas
           env["AUTOCONF"] = "autoconf --warnings=none"
 
           build_command = (
@@ -118,15 +117,19 @@ jobs:
 
       - name: Locate, Compact and Secure Certified APK Output
         run: |
-          echo "Buscando o APK gerado..."
+          echo "Varredura ampla buscando qualquer APK gerado no workspace..."
           mkdir -p final_apk
-          find . -name "*.apk" -exec cp {} final_apk/ \;
+          find . -type f -name "*.apk" -exec cp {} final_apk/ \;
+          
+          # Se não achou na busca padrão, tenta listar o diretório bin explicitamente
+          ls -la ./bin || true
+          cp -f ./bin/*.apk final_apk/ 2>/dev/null || true
           
           if [ -z "$(ls -A final_apk/*.apk 2>/dev/null)" ]; then
             echo "❌ ERRO CRÍTICO: Nenhum arquivo APK foi fisicamente encontrado. O build falhou!"
             exit 1
           else
-            echo "✅ SUCESSO: APK localizado. Compactando pacote..."
+            echo "✅ SUCESSO: APK localizado com sucesso! Compactando pacote..."
             cd final_apk
             zip -9 nexus-certified-release.zip *.apk
             ls -la
