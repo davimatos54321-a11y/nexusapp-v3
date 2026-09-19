@@ -1,521 +1,271 @@
-import math
-import json
-import os
 import threading
-import requests
+import time
+import sqlite3
 import random
-from datetime import datetime
+import math
+from dataclasses import dataclass
+from typing import List, Tuple
+
+# Kivy imports
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
-from kivy.core.window import Window
-from kivy.clock import mainthread
-from kivy.graphics import Color, RoundedRectangle, Line
-from kivy.input.motionevent import MotionEvent
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle, Line
 
-try:
-    from jnius import autoclass
-    PythonActivity = autoclass('org.kivy.android.PythonActivity')
-    Intent = autoclass('android.content.Intent')
-    RecognizerIntent = autoclass('android.speech.RecognizerIntent')
-    ANDROID_VOICE_SUPPORT = True
-except Exception:
-    ANDROID_VOICE_SUPPORT = False
+# --- 1. CONTRATOS DE DADOS E VALIDAÇÃO CIENTÍFICA ---
+@dataclass(frozen=True)
+class Partida:
+    home_team: str
+    away_team: str
+    competition: str
+    odd_home: float
+    odd_draw: float
+    odd_away: float
 
-CACHE_FILE = "nexus_cache.json"
-CONFIG_FILE = "nexus_config.enc"
-HISTORY_FILE = "nexus_historico.json"
-SECRET_FILE = "config.json"
+    def __post_init__(self):
+        if self.odd_home <= 1.0 or self.odd_draw <= 1.0 or self.odd_away <= 1.0:
+            raise ValueError("Violação de Contrato: As odds devem ser estritamente superiores a 1.0")
 
-file_lock = threading.Lock()
-Window.clearcolor = (0.01, 0.03, 0.07, 1)
+@dataclass
+class BilheteSimulacao:
+    partida: str
+    mercado: str
+    odd_selecionada: float
+    probabilidade_estimada: float
+    stake_sugerida: float
+    retorno_potencial: float
 
-class CyberPanel(BoxLayout):
-    def __init__(self, border_color=(0, 0.94, 1, 0.6), bg_color=(0.02, 0.07, 0.15, 1), radius=[16], **kwargs):
-        super().__init__(**kwargs)
-        self.bg_color = bg_color
-        self.border_color = border_color
-        self.radius_val = radius
-        self.bind(size=self.update_canvas, pos=self.update_canvas)
 
-    def update_canvas(self, *args):
-        self.canvas.before.clear()
-        with self.canvas.before:
-            Color(*self.bg_color)
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=self.radius_val)
-            Color(*self.border_color)
-            self.line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, self.radius_val[0]), width=1.2)
+# --- 2. PERSISTÊNCIA ATÔMICA (SQLite) ---
+class NexusDatabase:
+    def __init__(self, db_path="nexus_quant.db"):
+        self.db_path = db_path
+        self._inicializar_banco()
 
-class CyberButton(Button):
-    def __init__(self, neon_color=(0, 0.94, 1, 1), **kwargs):
-        super().__init__(**kwargs)
-        self.background_normal = ''
-        self.background_down = ''
-        self.background_color = (0, 0, 0, 0)
-        self.neon_color = neon_color
-        self.color = (1, 1, 1, 1)
-        self.bold = True
-        self.font_size = 14
-        self.halign = 'center'
-        self.valign = 'middle'
-        self.bind(size=self.update_canvas, pos=self.update_canvas)
+    def _inicializar_banco(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS historico_bilhetes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                data TEXT,
+                partida TEXT,
+                mercado TEXT,
+                odd REAL,
+                probabilidade REAL,
+                stake REAL,
+                retorno REAL
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cofre_estado (
+                chave TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        ''')
+        conn.commit()
+        conn.close()
 
-    def update_canvas(self, *args):
-        self.canvas.before.clear()
-        with self.canvas.before:
-            Color(0.04, 0.10, 0.22, 1)
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[12])
-            Color(*self.neon_color)
-            self.line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, 12), width=1.5)
+    def salvar_bilhete(self, b: BilheteSimulacao):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO historico_bilhetes (data, partida, mercado, odd, probabilidade, stake, retorno)
+            VALUES (datetime('now'), ?, ?, ?, ?, ?, ?)
+        ''', (b.partida, b.mercado, b.odd_selecionada, b.probabilidade_estimada, b.stake_sugerida, b.retorno_potencial))
+        conn.commit()
+        conn.close()
 
-class ZoomableTextInput(TextInput):
-    """
-    TextInput avançado com suporte a gestos de pinça (Pinch to Zoom) 
-    para redimensionar o texto dinamicamente no celular.
-    """
+    def obter_historico(self) -> List[Tuple]:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT data, partida, mercado, odd, retorno FROM historico_bilhetes ORDER BY id DESC LIMIT 10")
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+
+
+# --- 3. RESILIÊNCIA DE REDE (BACKOFF EXPONENCIAL) ---
+def chamada_api_com_retry(func, max_tentativas=3, base_delay=1.0):
+    tentativa = 0
+    while tentativa < max_tentativas:
+        try:
+            return func()
+        except Exception as e:
+            tentativa += 1
+            if tentativa == max_tentativas:
+                raise RuntimeError(f"Falha crítica na API após {max_tentativas} tentativas: {e}")
+            delay = base_delay * (2 ** (tentativa - 1)) + random.uniform(0, 0.5)
+            time.sleep(delay)
+
+
+# --- 4. WIDGET GRÁFICO DE DISTRIBUIÇÃO ESTATÍSTICA (Canvas Kivy) ---
+class MonteCarloGraphWidget(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.touch_points = {}
+        self.resultados = []
+        self.bind(pos=self.atualizar_canvas, size=self.atualizar_canvas)
 
-    def on_touch_down(self, touch):
-        if self.collide_point(*touch.pos):
-            self.touch_points[touch.uid] = touch
-        return super().on_touch_down(touch)
+    def atualizar_dados(self, novos_resultados: List[float]):
+        self.resultados = novos_resultados
+        self.atualizar_canvas()
 
-    def on_touch_move(self, touch):
-        if touch.uid in self.touch_points:
-            self.touch_points[touch.uid] = touch
-            # Se dois dedos estiverem na tela ao mesmo tempo (gesto de pinça)
-            if len(self.touch_points) == 2:
-                pts = list(self.touch_points.values())
-                dist_atual = math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+    def atualizar_canvas(self, *args):
+        self.canvas.clear()
+        with self.canvas:
+            # Fundo do painel gráfico
+            Color(0.05, 0.06, 0.08, 1)
+            Rectangle(pos=self.pos, size=self.size)
+
+            # Moldura cibernética
+            Color(0.0, 0.8, 0.6, 0.5)
+            Line(rectangle=(self.x, self.y, self.width, self.height), width=1)
+
+            if not self.resultados:
+                return
+
+            # Agrupamento estatístico em 10 bins
+            num_bins = 10
+            bins = [0] * num_bins
+            for val in self.resultados:
+                idx = min(int(val * num_bins), num_bins - 1)
+                bins[idx] += 1
+
+            max_freq = max(bins) if max(bins) > 0 else 1
+            w_barra = self.width / num_bins
+            
+            for i, freq in enumerate(bins):
+                h_barra = (freq / max_freq) * (self.height - 30)
+                x_barra = self.x + (i * w_barra) + 2
+                y_barra = self.y + 15
                 
-                # Guarda a distância inicial para calcular a expansão ou redução
-                if not hasattr(self, '_dist_inicial') or self._dist_inicial is None:
-                    self._dist_inicial = dist_atual
+                # Barras de densidade de probabilidade
+                Color(0.0, 0.7, 0.5, 0.8)
+                Rectangle(pos=(x_barra, y_barra), size=(w_barra - 4, h_barra))
 
-                diff = dist_atual - self._dist_inicial
-                if abs(diff) > 30:  # Limiar para evitar zoom sensível demais
-                    if diff > 0 and self.font_size < 28:
-                        self.font_size += 0.5
-                    elif diff < 0 and self.font_size > 10:
-                        self.font_size -= 0.5
-                    self._dist_inicial = dist_atual
-        return super().on_touch_move(touch)
 
-    def on_touch_up(self, touch):
-        if touch.uid in self.touch_points:
-            del self.touch_points[touch.uid]
-        if len(self.touch_points) < 2:
-            self._dist_inicial = None
-        return super().on_touch_up(touch)
-
-class NexusQuantumApp(App):
-    def build(self):
-        layout = BoxLayout(orientation='vertical', padding=16, spacing=12)
-
-        self.titulo = Label(
-            text="[b][color=#00f0ff]NEXUS QUANTUM[/color] [color=#bd00ff]// 100K CORE[/color][/b]",
+# --- 5. INTERFACE DE USUÁRIO (KIVY SCREEN) ---
+class DashboardScreen(Screen):
+    def __init__(self, db: NexusDatabase, **kwargs):
+        super().__init__(**kwargs)
+        self.db = db
+        
+        layout = BoxLayout(orientation='vertical', padding=15, spacing=12)
+        
+        # Cabeçalho Principal
+        lbl_titulo = Label(
+            text="[b]NEXUS QUANTUM ENGINE - PRO V2[/b]",
             markup=True,
             font_size=18,
             size_hint_y=None,
-            height=38,
-            halign='center',
-            valign='middle'
+            height=35,
+            color=(0.0, 0.8, 0.6, 1)
         )
-        self.titulo.bind(size=self.titulo.setter('text_size'))
-        layout.add_widget(self.titulo)
+        layout.add_widget(lbl_titulo)
 
-        # Bloco de Banca
-        painel_banca = CyberPanel(
-            border_color=(0, 0.94, 1, 0.5),
+        # Formulário de Parâmetros
+        form_layout = GridLayout(cols=2, spacing=10, size_hint_y=None, height=100)
+        form_layout.add_widget(Label(text="Banca Inicial (R$):", color=(0.8, 0.8, 0.8, 1)))
+        self.input_banca = TextInput(text="1000.0", multiline=False)
+        form_layout.add_widget(self.input_banca)
+
+        form_layout.add_widget(Label(text="Risco Máximo (%):", color=(0.8, 0.8, 0.8, 1)))
+        self.input_risco = TextInput(text="2.0", multiline=False)
+        form_layout.add_widget(self.input_risco)
+        layout.add_widget(form_layout)
+
+        # Botão de Execução Assíncrona
+        btn_simular = Button(
+            text=" EXECUTAR SIMULAÇÃO DE MONTE CARLO ",
             size_hint_y=None,
-            height=54,
-            padding=8,
-            spacing=8
+            height=45,
+            background_color=(0.0, 0.6, 0.4, 1)
         )
-        
-        self.txt_banca = TextInput(
-            text=self.obter_config("banca_valor", "100.0"),
-            hint_text='Banca (R$)...',
-            multiline=False,
-            size_hint_x=0.45,
-            background_color=(0.01, 0.04, 0.10, 1),
-            foreground_color=(0, 0.94, 1, 1),
-            cursor_color=(0, 0.94, 1, 1),
-            font_size=14,
-            padding=[10, 10, 10, 10]
+        btn_simular.bind(on_press=self.executar_processamento)
+        layout.add_widget(btn_simular)
+
+        # Widget de Gráfico Estatístico
+        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=150)
+        layout.add_widget(self.graph_widget)
+
+        # Terminal de Logs e Telemetria
+        self.terminal = TextInput(
+            text="Sistema pronto. Clique em executar para iniciar o pipeline quantitativo.\n",
+            background_color=(0.08, 0.09, 0.11, 1),
+            foreground_color=(0.9, 0.9, 0.95, 1),
+            cursor_color=(0.0, 0.8, 0.6, 1),
+            readonly=True,
+            multiline=True
         )
-        painel_banca.add_widget(self.txt_banca)
+        layout.add_widget(self.terminal)
 
-        self.txt_risco = TextInput(
-            text=self.obter_config("risco_pct", "2.0"),
-            hint_text='Risco (%/Aposta)...',
-            multiline=False,
-            size_hint_x=0.40,
-            background_color=(0.01, 0.04, 0.10, 1),
-            foreground_color=(0, 0.94, 1, 1),
-            cursor_color=(0, 0.94, 1, 1),
-            font_size=14,
-            padding=[10, 10, 10, 10]
-        )
-        painel_banca.add_widget(self.txt_risco)
-        
-        self.btn_salvar_banca = CyberButton(
-            text='💾',
-            neon_color=(0.15, 0.85, 0.45, 1),
-            size_hint_x=0.15
-        )
-        self.btn_salvar_banca.bind(on_press=self.salvar_configuracoes_banca)
-        painel_banca.add_widget(self.btn_salvar_banca)
-        
-        layout.add_widget(painel_banca)
+        self.add_widget(layout)
 
-        # Visor Central com a nova tecnologia de Zoom por Pinça (Pinch to Zoom)
-        painel_visor = CyberPanel(
-            border_color=(0.74, 0, 1, 0.6),
-            bg_color=(0.015, 0.04, 0.09, 1),
-            size_hint_y=0.38,
-            padding=6
-        )
-        
-        self.txt_chat_ia = ZoomableTextInput(
-            text="[Nexus AI Engine]: Sistema blindado e sincronizado.\n💡 Dica: Use dois dedos em pinça (aproximar/afastar) nesta caixa para dar ZOOM nos números e letras!",
-            background_color=(0, 0, 0, 0),
-            foreground_color=(0.20, 1, 0.80, 1),
-            cursor_color=(0.20, 1, 0.80, 1),
-            readonly=False,
-            multiline=True,
-            font_size=16,
-            padding=[14, 14, 14, 14]
-        )
-        painel_visor.add_widget(self.txt_chat_ia)
-        layout.add_widget(painel_visor)
+    def executar_processamento(self, instance):
+        self.terminal.text = "Iniciando pipeline com validação estrita e retry de rede...\n"
+        threading.Thread(target=self._processamento_background, daemon=True).start()
 
-        grid_botoes = GridLayout(cols=2, spacing=10, size_hint_y=None, height=140)
+    def _processamento_background(self):
+        try:
+            banca = float(self.input_banca.text)
+            risco = float(self.input_risco.text)
 
-        self.btn_jogos_hoje = CyberButton(
-            text='🎲 Gerar Bilhete 100k',
-            neon_color=(0, 0.94, 1, 1)
-        )
-        self.btn_jogos_hoje.bind(on_press=lambda x: self.disparar_processamento_async())
-        grid_botoes.add_widget(self.btn_jogos_hoje)
+            # Simulação de busca segura com retry em API externa de partidas
+            def fetch_partidas_mock():
+                return [
+                    Partida("Flamengo", "Palmeiras", "Brasileirão Série A", 2.10, 3.40, 3.20),
+                    Partida("Real Madrid", "Barcelona", "La Liga", 1.95, 3.60, 3.80),
+                    Partida("Manchester City", "Arsenal", "Premier League", 1.80, 3.70, 4.20)
+                ]
 
-        self.btn_historico = CyberButton(
-            text='📂 Ver Histórico',
-            neon_color=(0.30, 0.50, 1, 1)
-        )
-        self.btn_historico.bind(on_press=lambda x: self.exibir_historico_salvo())
-        grid_botoes.add_widget(self.btn_historico)
-
-        self.btn_ia_generativa = CyberButton(
-            text='🧠 Parecer Quântico (Gemini)',
-            neon_color=(0.74, 0, 1, 1)
-        )
-        self.btn_ia_generativa.bind(on_press=lambda x: self.executar_analise_ia_generativa())
-        grid_botoes.add_widget(self.btn_ia_generativa)
-
-        self.btn_testar_net = CyberButton(
-            text='🌐 Testar Conexão',
-            neon_color=(1, 0.55, 0, 1)
-        )
-        self.btn_testar_net.bind(on_press=lambda x: self.testar_conexao_internet())
-        grid_botoes.add_widget(self.btn_testar_net)
-
-        layout.add_widget(grid_botoes)
-
-        # Barra Inferior com margens e input de consulta rápida
-        painel_barra = CyberPanel(
-            border_color=(0, 0.94, 1, 0.4),
-            size_hint_y=None,
-            height=54,
-            padding=8,
-            spacing=8
-        )
-        
-        self.btn_voz_barra = CyberButton(
-            text='🎙️',
-            neon_color=(0.30, 0.50, 1, 1),
-            size_hint_x=0.15
-        )
-        self.btn_voz_barra.bind(on_press=lambda x: self.iniciar_captura_voz())
-        painel_barra.add_widget(self.btn_voz_barra)
-
-        self.txt_pergunta_livre = TextInput(
-            hint_text='Consultar time ou status...',
-            multiline=False,
-            size_hint_x=0.60,
-            background_color=(0.01, 0.04, 0.10, 1),
-            foreground_color=(0, 0.94, 1, 1),
-            cursor_color=(0, 0.94, 1, 1),
-            font_size=14,
-            padding=[10, 10, 10, 10]
-        )
-        painel_barra.add_widget(self.txt_pergunta_livre)
-
-        self.btn_perguntar_ia = CyberButton(
-            text='➤ Enviar',
-            neon_color=(0.74, 0, 1, 1),
-            size_hint_x=0.25
-        )
-        self.btn_perguntar_ia.bind(on_press=lambda x: self.processar_pergunta_livre())
-        painel_barra.add_widget(self.btn_perguntar_ia)
-
-        layout.add_widget(painel_barra)
-
-        self.inicializar_cofre()
-        return layout
-
-    def inicializar_cofre(self):
-        with file_lock:
-            if not os.path.exists(CONFIG_FILE):
-                try:
-                    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                        json.dump({"banca_valor": "100.0", "risco_pct": "2.0"}, f, ensure_ascii=False)
-                except: pass
-
-    def obter_config(self, chave, padrao=""):
-        with file_lock:
-            if os.path.exists(CONFIG_FILE):
-                try:
-                    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                        return json.load(f).get(chave, padrao)
-                except: pass
-            return padrao
-
-    def obter_chave_gemini(self):
-        if os.path.exists(SECRET_FILE):
-            try:
-                with open(SECRET_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f).get("gemini_key", "")
-            except: pass
-        return ""
-
-    def salvar_configuracoes_banca(self, instance):
-        banca = self.txt_banca.text.strip()
-        risco = self.txt_risco.text.strip()
-        with file_lock:
-            dados = {}
-            if os.path.exists(CONFIG_FILE):
-                try:
-                    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                        dados = json.load(f)
-                except: pass
-            dados["banca_valor"] = banca if banca else "100.0"
-            dados["risco_pct"] = risco if risco else "2.0"
-            try:
-                with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(dados, f, ensure_ascii=False)
-                self.atualizar_interface_texto("[Nexus AI]: Gestão de banca atualizada e blindada com sucesso.")
-            except Exception as e:
-                self.atualizar_interface_texto(f"Erro ao salvar banca: {e}")
-
-    def salvar_no_historico(self, texto_bilhete):
-        with file_lock:
-            historico = []
-            if os.path.exists(HISTORY_FILE):
-                try:
-                    with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                        historico = json.load(f)
-                except: pass
+            partidas = chamada_api_com_retry(fetch_partidas_mock)
             
-            data_atual = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            historico.insert(0, {"data": data_atual, "conteudo": texto_bilhete})
-            historico = historico[:30]
-            
-            try:
-                with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(historico, f, ensure_ascii=False)
-            except: pass
+            Clock.schedule_once(lambda dt: self.terminal.insert_text(f"[API] {len(partidas)} partidas validadas via Dataclass com sucesso.\n"), 0)
 
-    def exibir_historico_salvo(self):
-        with file_lock:
-            if not os.path.exists(HISTORY_FILE):
-                self.atualizar_interface_texto("📂 [Histórico]: Nenhum bilhete salvo ainda. Gere seu primeiro bilhete 100k!")
-                return
-            try:
-                with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                    historico = json.load(f)
-                if not historico:
-                    self.atualizar_interface_texto("📂 [Histórico]: O registro de bilhetes está vazio.")
-                    return
+            # Motor de Monte Carlo (10.000 iterações estocásticas por partida)
+            todos_resultados = []
+            for p in partidas:
+                vitorias = sum(1 for _ in range(10000) if random.random() < (1.0 / p.odd_home))
+                prob = vitorias / 10000.0
+                todos_resultados.append(prob)
                 
-                relatorio_hist = f"📂 === HISTÓRICO DE BILHETES ({len(historico)} Salvos) === 📂\n\n"
-                for item in historico[:3]: 
-                    data_reg = item.get('data', 'Data desconhecida')
-                    conteudo_reg = item.get('conteudo', str(item))
-                    relatorio_hist += f"📅 Data: {data_reg}\n{conteudo_reg}\n" + "="*30 + "\n\n"
+                stake = banca * (risco / 100.0)
+                retorno = stake * p.odd_home
                 
-                self.atualizar_interface_texto(relatorio_hist)
-            except Exception as e:
-                self.atualizar_interface_texto(f"❌ Erro ao carregar histórico: {e}")
+                bilhete = BilheteSimulacao(
+                    partida=f"{p.home_team} vs {p.away_team}",
+                    mercado="Match Odds (Casa)",
+                    odd_selecionada=p.odd_home,
+                    probabilidade_estimada=prob,
+                    stake_sugerida=stake,
+                    retorno_potencial=retorno
+                )
+                
+                # Persistência relacional atômica
+                self.db.salvar_bilhete(bilhete)
 
-    def iniciar_captura_voz(self):
-        if ANDROID_VOICE_SUPPORT:
-            try:
-                activity = PythonActivity.mActivity
-                intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale sua consulta...")
-                activity.startActivity(intent)
-                self.atualizar_interface_texto("🎙️ [Microfone Ativo]: Ouvindo comando...")
-            except Exception as e:
-                self.atualizar_interface_texto(f"⚠️ Erro no microfone: {str(e)}")
-        else:
-            self.atualizar_interface_texto("🎙️ [Simulação de Voz]: Dispositivo acionado com sucesso!")
-
-    def processar_pergunta_livre(self):
-        pergunta = self.txt_pergunta_livre.text.strip()
-        if not pergunta:
-            self.atualizar_interface_texto("⚠️ Digite ou utilize o microfone.")
-            return
-        self.atualizar_interface_texto(f"🤖 [Nexus AI]: Consulta sobre '{pergunta}' processada com base no cache local.")
-
-    @mainthread
-    def atualizar_interface_texto(self, novo_texto):
-        self.txt_chat_ia.text = novo_texto
-
-    def testar_conexao_internet(self):
-        self.atualizar_interface_texto("🌐 Testando conexão com a internet...")
-        threading.Thread(target=self._executar_teste_rede, daemon=True).start()
-
-    def _executar_teste_rede(self):
-        try:
-            requests.get("https://www.google.com", timeout=4)
-            self.atualizar_interface_texto("🌐 [DIAGNÓSTICO]: Conexão com a internet está ativa e operando perfeitamente!")
-        except Exception:
-            self.atualizar_interface_texto("❌ [FALHA DE REDE]: Sem conexão com a internet no Android.")
-
-    def disparar_processamento_async(self):
-        self.btn_jogos_hoje.disabled = True
-        self.atualizar_interface_texto("⏳ Calculando gestão de banca e rodando 100.000 simulações de Monte Carlo...")
-        threading.Thread(target=self.processo_monte_carlo, daemon=True).start()
-
-    def processo_monte_carlo(self):
-        try:
-            banca_val = float(str(self.obter_config("banca_valor", "100.0")).replace(',', '.'))
-        except:
-            banca_val = 100.0
-
-        try:
-            risco_pct = float(str(self.obter_config("risco_pct", "2.0")).replace(',', '.'))
-        except:
-            risco_pct = 2.0
-
-        stake_sugerida = banca_val * (risco_pct / 100.0)
-
-        matches = self.ler_cache_seguro()
-        if not matches:
-            matches = [
-                {"homeTeam": {"name": "Arsenal"}, "awayTeam": {"name": "Chelsea"}, "competition": {"name": "Premier League"}},
-                {"homeTeam": {"name": "Real Madrid"}, "awayTeam": {"name": "Barcelona"}, "competition": {"name": "La Liga"}},
-                {"homeTeam": {"name": "Flamengo"}, "awayTeam": {"name": "Palmeiras"}, "competition": {"name": "Campeonato Brasileiro"}}
-            ]
-
-        data_hoje = datetime.now().strftime('%Y-%m-%d')
-        matches_hoje = matches[:5]
-
-        texto_relatorio = f"🎟️ === BILHETE NEXUS (100k) // {data_hoje} === 🎟️\n"
-        texto_relatorio += f"💰 Banca: R$ {banca_val:.2f} | Stake por Aposta ({risco_pct}%): R$ {stake_sugerida:.2f}\n\n"
-
-        for idx, m in enumerate(matches_hoje, start=1):
-            home = m.get('homeTeam', {}).get('name', 'Mandante')
-            away = m.get('awayTeam', {}).get('name', 'Visitante')
-            comp = m.get('competition', {}).get('name', 'Liga Oficial')
+            # Atualização segura da interface gráfica via Clock Scheduler
+            Clock.schedule_once(lambda dt: self.graph_widget.atualizar_dados(todos_resultados), 0)
+            Clock.schedule_once(lambda dt: self.terminal.insert_text("\n[SUCESSO] Simulação concluída! Gráfico renderizado e dados persistidos no SQLite.\n"), 0)
             
-            simulacoes = 100000
-            vitorias_home = 0
-            empates = 0
-            vitorias_away = 0
-            total_gols = 0
+            historico = self.db.obter_historico()
+            Clock.schedule_once(lambda dt: self.terminal.insert_text(f"Total de bilhetes armazenados no banco relacional: {len(historico)}\n"), 0)
 
-            lambda_home = 1.45
-            lambda_away = 1.10
-
-            for _ in range(simulacoes):
-                gols_h = int(random.gauss(lambda_home, 0.8))
-                gols_a = int(random.gauss(lambda_away, 0.7))
-                gols_h = max(0, gols_h)
-                gols_a = max(0, gols_a)
-
-                total_gols += (gols_h + gols_a)
-
-                if gols_h > gols_a:
-                    vitorias_home += 1
-                elif gols_h == gols_a:
-                    empates += 1
-                else:
-                    vitorias_away += 1
-
-            p_h = (vitorias_home / simulacoes) * 100
-            p_e = (empates / simulacoes) * 100
-            p_a = (vitorias_away / simulacoes) * 100
-            media_gols = total_gols / simulacoes
-
-            if p_h >= 55.0:
-                sugestao_1x2 = f"Vitória Casa ({home})"
-            elif p_a >= 50.0:
-                sugestao_1x2 = f"Vitória Fora ({away})"
-            else:
-                sugestao_1x2 = "Dupla Hipótese / Empate Anula"
-
-            if media_gols > 2.5:
-                sugestao_gols = "Over 2.5 Gols"
-            else:
-                sugestao_gols = "Under 3.5 Gols / BTTS"
-
-            texto_relatorio += f"[{idx}] {comp}\n"
-            texto_relatorio += f"⚽ {home} x {away}\n"
-            texto_relatorio += f"  🎯 [1X2]: {sugestao_1x2} ({max(p_h, p_e, p_a):.1f}%)\n"
-            texto_relatorio += f"  🥅 [Gols]: {sugestao_gols} (Media: {media_gols:.2f})\n"
-            texto_relatorio += f"  💵 [Stake Recomendada]: R$ {stake_sugerida:.2f}\n"
-            texto_relatorio += "-" * 34 + "\n\n"
-
-        texto_relatorio += "💡 Dica: 100k iterações concluídas e salvas no histórico."
-
-        self.salvar_no_historico(texto_relatorio)
-        self.atualizar_interface_texto(texto_relatorio)
-        self.btn_jogos_hoje.disabled = False
-
-    def ler_cache_seguro(self):
-        with file_lock:
-            if not os.path.exists(CACHE_FILE): return []
-            try:
-                with open(CACHE_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    return data.get("matches", data.get("events", []))
-            except: return []
-
-    def executar_analise_ia_generativa(self):
-        self.atualizar_interface_texto("🧠 [Nexus AI]: Consultando a inteligência quântica do Gemini...")
-        threading.Thread(target=self._chamar_gemini_api, daemon=True).start()
-
-    def _chamar_gemini_api(self):
-        chave_api = self.obter_chave_gemini()
-        if not chave_api:
-            self.atualizar_interface_texto("❌ Erro: Chave do Gemini não encontrada no arquivo 'config.json'.")
-            return
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={chave_api}"
-        payload = {
-            "contents": [{
-                "parts": [{"text": "Faça uma análise estatística e parecer profissional avançado de apostas esportivas focando no mercado de Gols e Resultados para os jogos de hoje, simulando tendências de Monte Carlo."}]
-            }]
-        }
-        headers = {'Content-Type': 'application/json'}
-        try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=12)
-            if resp.status_code == 200:
-                res_json = resp.json()
-                texto_resposta = res_json.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Sem resposta formatada.')
-                self.atualizar_interface_texto(f"🧠 PARECER QUÂNTICO (Google Gemini):\n\n{texto_resposta}")
-            else:
-                self.atualizar_interface_texto(f"❌ Erro na API do Gemini: Status HTTP {resp.status_code}")
         except Exception as e:
-            self.atualizar_interface_texto(f"❌ Falha de conexão ao consultar o Gemini: {str(e)}")
+            Clock.schedule_once(lambda dt: self.terminal.insert_text(f"[ERRO CRÍTICO] {e}\n"), 0)
 
-if __name__ == "__main__":
-    NexusQuantumApp().run()
+
+class NexusApp(App):
+    def build(self):
+        self.db = NexusDatabase()
+        sm = ScreenManager()
+        sm.add_widget(DashboardScreen(self.db, name='dashboard'))
+        return sm
+
+if __name__ == '__main__':
+    NexusApp().run()
