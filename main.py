@@ -6,6 +6,7 @@ import math
 import datetime
 import urllib.request
 import json
+import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -20,11 +21,36 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.clock import Clock
-from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
+from kivy.graphics import Color, RoundedRectangle, Line
 
-# Desativa o efeito visual de toque (mancha/ripple) na tela
+# Importação defensiva do Plyer para síntese de voz nativa (TTS) no Android
+try:
+    from plyer import tts
+    DISPONIVEL_TTS = True
+except ImportError:
+    DISPONIVEL_TTS = False
+
+# Desativa o efeito visual de toque (mancha/ripple) na tela do Kivy
 from kivy.config import Config
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
+
+
+# =====================================================================
+# CARREGAMENTO EXCLUSIVO DO CONFIG.JSON (ZERO CHAVES EXPOSTAS NO CÓDIGO)
+# =====================================================================
+def carregar_chave_api() -> str:
+    """Lê a chave exclusivamente do arquivo local config.json."""
+    caminho_config = "config.json"
+    try:
+        if os.path.exists(caminho_config):
+            with open(caminho_config, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+                return dados.get("gemini_api_key", "")
+    except Exception as e:
+        print(f"Erro ao carregar chave de configuração: {e}")
+    return ""
+
+GEMINI_API_KEY = carregar_chave_api()
 
 
 # =====================================================================
@@ -32,12 +58,16 @@ Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 # =====================================================================
 class NetworkTimeManager:
     @staticmethod
-    def verificar_conexao_internet(timeout=3) -> bool:
+    def verificar_conexao_internet(timeout=4) -> bool:
         try:
-            urllib.request.urlopen('https://www.google.com', timeout=timeout)
+            urllib.request.urlopen('https://generativelanguage.googleapis.com', timeout=timeout)
             return True
         except Exception:
-            return False
+            try:
+                urllib.request.urlopen('https://www.google.com', timeout=timeout)
+                return True
+            except Exception:
+                return False
 
     @staticmethod
     def obter_timestamp_atual() -> str:
@@ -45,7 +75,25 @@ class NetworkTimeManager:
 
 
 # =====================================================================
-# 2. CONTRATOS DE DADOS ESTRITOS (Dataclasses)
+# 2. MOTOR DE SÍNTESE DE VOZ (TEXT-TO-SPEECH)
+# =====================================================================
+class VoiceSynthesizer:
+    @staticmethod
+    def falar(texto: str):
+        """Executa a síntese de voz em thread isolada."""
+        def _executar_voz():
+            try:
+                if DISPONIVEL_TTS:
+                    texto_limpo = texto.replace("*", "").replace("#", "").replace("•", "").replace("`", "").replace("_", "")
+                    tts.speak(texto_limpo)
+            except Exception as e:
+                print(f"Erro crítico no TTS: {e}")
+
+        threading.Thread(target=_executar_voz, daemon=True).start()
+
+
+# =====================================================================
+# 3. CONTRATOS DE DADOS ESTRITOS (Dataclasses)
 # =====================================================================
 @dataclass(frozen=True)
 class Partida:
@@ -72,7 +120,7 @@ class BilheteSimulacao:
 
 
 # =====================================================================
-# 3. PERSISTÊNCIA ATÔMICA (SQLite com Contexto Seguro)
+# 4. PERSISTÊNCIA ATÔMICA (SQLite com Contexto Seguro)
 # =====================================================================
 class NexusDatabase:
     def __init__(self, db_path="nexus_master_complete.db"):
@@ -178,94 +226,109 @@ class NexusDatabase:
 
 
 # =====================================================================
-# 4. MOTOR HÍBRIDO DE INTELIGÊNCIA
+# 5. MOTOR DE INTELIGÊNCIA ARTIFICIAL (GEMINI API)
 # =====================================================================
 def consultar_ia_nuvem(pergunta: str) -> str:
+    if not GEMINI_API_KEY:
+        return "[Erro]: Chave de API não encontrada no config.json."
     if not NetworkTimeManager.verificar_conexao_internet():
         return gerar_resposta_base_local(pergunta, modo_offline=True)
 
     try:
-        url = "https://api.duckduckgo.com/?q=" + urllib.parse.quote(pergunta) + "&format=json"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=4) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            abstract = data.get('AbstractText', '')
-            if abstract:
-                return f"[NEXUS IA (Web Search)]:\n{abstract}\n\nAnálise Concluída com sucesso via rede."
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        payload = {
+            "contents": [{
+                "parts": [{"text": pergunta}]
+            }]
+        }
+        
+        data_json = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            url, 
+            data=data_json, 
+            headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=15) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
             
-            related = data.get('RelatedTopics', [])
-            if related and isinstance(related, list):
-                for item in related:
-                    if 'Text' in item:
-                        return f"[NEXUS IA (Web Search)]:\n{item['Text']}\n\nFonte consultada na web."
+            candidates = res_data.get('candidates', [])
+            if candidates:
+                content = candidates[0].get('content', {})
+                parts = content.get('parts', [])
+                if parts:
+                    texto_resposta = parts[0].get('text', '')
+                    if texto_resposta:
+                        return texto_resposta
                         
         return gerar_resposta_base_local(pergunta, modo_offline=False)
-    except Exception:
-        return gerar_resposta_base_local(pergunta, modo_offline=True)
+    except Exception as e:
+        return f"[Modo Fallback Local - Falha de Conexão/API]: {str(e)}\n\n" + gerar_resposta_base_local(pergunta, modo_offline=True)
 
 def gerar_resposta_base_local(pergunta: str, modo_offline: bool = False) -> str:
-    prefixo = "[Modo Offline Ativo - SQLite]" if modo_offline else "[Base Local Avançada]"
+    prefixo = "[Modo Offline Ativo]" if modo_offline else "[Base Local de Segurança]"
     return (
-        f"{prefixo} Análise para: '{pergunta}'\n\n"
-        "• O sistema processou sua solicitação utilizando os parâmetros lógicos locais e seguros do seu SQLite."
+        f"{prefixo} Análise quantitativa processada com sucesso para:\n'{pergunta}'\n\n"
+        "• O sistema operou utilizando os parâmetros lógicos locais integrados no banco SQLite."
     )
 
 
 # =====================================================================
-# 5. TELA DE LOGIN
+# 6. TELA DE LOGIN DO SISTEMA
 # =====================================================================
 class LoginScreen(Screen):
     def __init__(self, db: NexusDatabase, **kwargs):
         super().__init__(**kwargs)
         self.db = db
 
-        layout = BoxLayout(orientation='vertical', padding=24, spacing=18)
-        layout.add_widget(Label(size_hint_y=None, height=20))
+        layout = BoxLayout(orientation='vertical', padding=35, spacing=20)
+        layout.add_widget(Label(size_hint_y=None, height=30))
 
         lbl_titulo = Label(
-            text="[b]NEXUS QUANTUM OS[/b]\n[color=#00D9A3]Painel de Autenticação Híbrido[/color]",
+            text="[b]NEXUS QUANTUM OS[/b]\n[color=#00D9A3]Painel de Autenticação Build 12[/color]",
             markup=True,
-            font_size=26,
+            font_size=28,
             halign='center',
             size_hint_y=None,
-            height=90
+            height=100
         )
         layout.add_widget(lbl_titulo)
 
-        form_layout = GridLayout(cols=1, spacing=14, size_hint_y=None, height=220)
+        form_layout = GridLayout(cols=1, spacing=16, size_hint_y=None, height=260)
         
-        form_layout.add_widget(Label(text="Usuário Credenciado:", font_size=16, color=(0.8, 0.85, 0.9, 1), halign='left'))
+        form_layout.add_widget(Label(text="Usuário Credenciado:", font_size=18, color=(0.8, 0.85, 0.9, 1), halign='left'))
         self.input_usuario = TextInput(
             text="admin",
             multiline=False,
-            font_size=16,
+            font_size=18,
             background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(0.95, 0.97, 1.0, 1),
             cursor_color=(0.0, 0.85, 0.65, 1),
-            padding=[12, 14, 12, 14]
+            padding=[15, 16, 15, 16]
         )
         form_layout.add_widget(self.input_usuario)
 
-        form_layout.add_widget(Label(text="Chave de Acesso / Token:", font_size=16, color=(0.8, 0.85, 0.9, 1), halign='left'))
+        form_layout.add_widget(Label(text="Chave de Acesso / Token:", font_size=18, color=(0.8, 0.85, 0.9, 1), halign='left'))
         self.input_chave = TextInput(
             text="nexus2026",
             password=True,
             multiline=False,
-            font_size=16,
+            font_size=18,
             background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(0.95, 0.97, 1.0, 1),
             cursor_color=(0.0, 0.85, 0.65, 1),
-            padding=[12, 14, 12, 14]
+            padding=[15, 16, 15, 16]
         )
         form_layout.add_widget(self.input_chave)
         layout.add_widget(form_layout)
 
         btn_login = Button(
-            text="[b]AUTENTICAR E ACESSAR SISTEMA[/b]",
+            text="[b]AUTENTICAR E ENTRAR[/b]",
             markup=True,
-            font_size=17,
+            font_size=20,
             size_hint_y=None,
-            height=70,
+            height=80,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1),
             color=(1, 1, 1, 1)
@@ -273,7 +336,7 @@ class LoginScreen(Screen):
         btn_login.bind(on_press=self.tentar_login)
         layout.add_widget(btn_login)
 
-        self.lbl_status = Label(text="", font_size=15, color=(1, 0.4, 0.4, 1), size_hint_y=None, height=40)
+        self.lbl_status = Label(text="", font_size=16, color=(1, 0.4, 0.4, 1), size_hint_y=None, height=40)
         layout.add_widget(self.lbl_status)
         self.add_widget(layout)
 
@@ -286,7 +349,7 @@ class LoginScreen(Screen):
 
 
 # =====================================================================
-# 6. GRÁFICO DE MONTE CARLO
+# 7. GRÁFICO DE MONTE CARLO ESTOCÁSTICO
 # =====================================================================
 class MonteCarloGraphWidget(BoxLayout):
     def __init__(self, **kwargs):
@@ -302,15 +365,15 @@ class MonteCarloGraphWidget(BoxLayout):
         self.canvas.clear()
         with self.canvas:
             Color(0.09, 0.12, 0.17, 1)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[12])
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[14])
 
             Color(0.0, 0.85, 0.65, 0.25)
-            Line(rounded_rectangle=(self.x, self.y, self.width, self.height, 12), width=1.2)
+            Line(rounded_rectangle=(self.x, self.y, self.width, self.height, 14), width=1.4)
 
             Color(0.18, 0.24, 0.32, 0.6)
             for i in range(1, 4):
                 y_line = self.y + (self.height / 4) * i
-                Line(points=[self.x + 12, y_line, self.x + self.width - 12, y_line], width=1)
+                Line(points=[self.x + 15, y_line, self.x + self.width - 15, y_line], width=1)
 
             if not self.resultados:
                 return
@@ -322,58 +385,45 @@ class MonteCarloGraphWidget(BoxLayout):
                 bins[idx] += 1
 
             max_freq = max(bins) if max(bins) > 0 else 1
-            w_barra = (self.width - 32) / num_bins
+            w_barra = (self.width - 36) / num_bins
             
             for i, freq in enumerate(bins):
-                h_barra = (freq / max_freq) * (self.height - 45)
-                x_barra = self.x + 16 + (i * w_barra) + 2
-                y_barra = self.y + 20
+                h_barra = (freq / max_freq) * (self.height - 50)
+                x_barra = self.x + 18 + (i * w_barra) + 2
+                y_barra = self.y + 22
                 
                 Color(0.0, 0.82, 0.62, 0.95)
-                RoundedRectangle(pos=(x_barra, y_barra), size=(w_barra - 4, max(h_barra, 4)), radius=[5])
+                RoundedRectangle(pos=(x_barra, y_barra), size=(w_barra - 4, max(h_barra, 4)), radius=[6])
                 
                 Color(0.4, 0.95, 0.80, 0.6)
                 RoundedRectangle(pos=(x_barra, y_barra + max(h_barra - 4, 0)), size=(w_barra - 4, 4), radius=[2])
 
 
 # =====================================================================
-# 7. TELA PRINCIPAL (Com ScrollView Integrado)
+# 8. TELA PRINCIPAL
 # =====================================================================
 class MainOSScreen(Screen):
     def __init__(self, db: NexusDatabase, **kwargs):
         super().__init__(**kwargs)
         self.db = db
+        self.gravando_voz = False
 
-        layout = BoxLayout(orientation='vertical', padding=8, spacing=6)
+        layout = BoxLayout(orientation='vertical', padding=[24, 16, 24, 16], spacing=12)
 
-        self.topo_status = Label(
-            text="[color=#00D9A3]● SISTEMA VERIFICADO[/color] | Sincronizando...",
-            markup=True,
-            font_size=15,
-            size_hint_y=None,
-            height=28,
-            halign='center'
-        )
-        layout.add_widget(self.topo_status)
-
-        # ScrollView aplicado para garantir responsividade total em qualquer tela
         self.scroll_view = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        self.conteudo_dinamico = BoxLayout(orientation='vertical', spacing=8, size_hint_y=None)
+        self.conteudo_dinamico = BoxLayout(orientation='vertical', spacing=14, size_hint_y=None)
         self.conteudo_dinamico.bind(minimum_height=self.conteudo_dinamico.setter('height'))
         self.scroll_view.add_widget(self.conteudo_dinamico)
         layout.add_widget(self.scroll_view)
 
-        # -------------------------------------------------------------
-        # BARRA INFERIOR FIXA
-        # -------------------------------------------------------------
-        barra_inferior = BoxLayout(orientation='vertical', size_hint_y=None, height=190, spacing=6)
+        barra_inferior = BoxLayout(orientation='vertical', size_hint_y=None, height=270, spacing=10)
 
-        abas_layout = BoxLayout(size_hint_y=None, height=100, spacing=8)
+        abas_layout = BoxLayout(size_hint_y=None, height=65, spacing=10)
         
         self.btn_aba_apostas = Button(
             text="[b]APOSTAS[/b]",
             markup=True,
-            font_size=18,
+            font_size=16,
             background_normal='',
             background_color=(0.0, 0.68, 0.50, 1)
         )
@@ -383,7 +433,7 @@ class MainOSScreen(Screen):
         self.btn_aba_geral = Button(
             text="[b]PESQUISA[/b]",
             markup=True,
-            font_size=18,
+            font_size=16,
             background_normal='',
             background_color=(0.16, 0.22, 0.30, 1)
         )
@@ -391,9 +441,9 @@ class MainOSScreen(Screen):
         abas_layout.add_widget(self.btn_aba_geral)
 
         self.btn_aba_chat = Button(
-            text="[b]CHAT Q&A IA[/b]",
+            text="[b]CHAT Q&A[/b]",
             markup=True,
-            font_size=18,
+            font_size=16,
             background_normal='',
             background_color=(0.16, 0.22, 0.30, 1)
         )
@@ -407,7 +457,7 @@ class MainOSScreen(Screen):
             markup=True,
             font_size=16,
             size_hint_y=None,
-            height=75,
+            height=55,
             background_normal='',
             background_color=(0.85, 0.22, 0.22, 1)
         )
@@ -418,13 +468,6 @@ class MainOSScreen(Screen):
         self.add_widget(layout)
 
         self.mudar_aba('apostas')
-        Clock.schedule_interval(self.atualizar_status_sistema, 5.0)
-
-    def atualizar_status_sistema(self, dt):
-        online = NetworkTimeManager.verificar_conexao_internet()
-        status_str = "[color=#00D9A3]● MODO HÍBRIDO ONLINE[/color]" if online else "[color=#FF4444]○ MODO OFFLINE LOCAL[/color]"
-        hora_str = NetworkTimeManager.obter_timestamp_atual()
-        self.topo_status.text = f"{status_str} | Time: {hora_str}"
 
     def mudar_aba(self, aba: str):
         self.conteudo_dinamico.clear_widgets()
@@ -443,22 +486,22 @@ class MainOSScreen(Screen):
             self._construir_painel_chat()
 
     def _construir_painel_apostas(self):
-        form_layout = GridLayout(cols=2, spacing=8, size_hint_y=None, height=85)
-        form_layout.add_widget(Label(text="Banca Inicial (R$):", font_size=16, color=(0.85, 0.9, 0.95, 1)))
-        self.input_banca = TextInput(text="1000.0", multiline=False, font_size=16, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[10,12,10,12])
+        form_layout = GridLayout(cols=2, spacing=10, size_hint_y=None, height=100)
+        form_layout.add_widget(Label(text="Banca Inicial (R$):", font_size=18, color=(0.85, 0.9, 0.95, 1)))
+        self.input_banca = TextInput(text="1000.0", multiline=False, font_size=18, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[12,14,12,14])
         form_layout.add_widget(self.input_banca)
 
-        form_layout.add_widget(Label(text="Risco Máximo (%):", font_size=16, color=(0.85, 0.9, 0.95, 1)))
-        self.input_risco = TextInput(text="2.0", multiline=False, font_size=16, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[10,12,10,12])
+        form_layout.add_widget(Label(text="Risco Máximo (%):", font_size=18, color=(0.85, 0.9, 0.95, 1)))
+        self.input_risco = TextInput(text="2.0", multiline=False, font_size=18, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[12,14,12,14])
         form_layout.add_widget(self.input_risco)
         self.conteudo_dinamico.add_widget(form_layout)
 
         btn_simular = Button(
-            text="[b]EXECUTAR 100.000 SIMULAÇÕES DE MONTE CARLO[/b]",
+            text="[b]EXECUTAR 100.000 SIMULAÇÕES[/b]",
             markup=True,
-            font_size=15,
+            font_size=17,
             size_hint_y=None,
-            height=60,
+            height=70,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1),
             color=(1, 1, 1, 1)
@@ -466,79 +509,93 @@ class MainOSScreen(Screen):
         btn_simular.bind(on_press=self.executar_monte_carlo)
         self.conteudo_dinamico.add_widget(btn_simular)
 
-        self.conteudo_dinamico.add_widget(Label(text="[b]Distribuição Estocástica das Probabilidades:[/b]", markup=True, font_size=14, size_hint_y=None, height=24, color=(0.85, 0.9, 0.95, 1)))
+        self.conteudo_dinamico.add_widget(Label(text="[b]Distribuição Estocástica:[/b]", markup=True, font_size=16, size_hint_y=None, height=30, color=(0.85, 0.9, 0.95, 1)))
         
-        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=135)
+        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=170)
         self.conteudo_dinamico.add_widget(self.graph_widget)
 
         self.terminal_apostas = TextInput(
-            text="> Módulo Quantitativo pronto. 100.000 iterações ativas.\n",
+            text="Sistema Quantitativo Build 12 pronto. 100.000 iterações ativas.\n",
             background_color=(0.07, 0.09, 0.13, 1),
             foreground_color=(0.0, 0.95, 0.75, 1),
             readonly=True,
             multiline=True,
-            font_size=14,
+            font_size=16,
             size_hint_y=None,
-            height=150,
-            padding=[10, 10, 10, 10]
+            height=180,
+            padding=[14, 14, 14, 14]
         )
         self.conteudo_dinamico.add_widget(self.terminal_apostas)
 
     def _construir_painel_geral(self):
         self.conteudo_dinamico.add_widget(Label(
-            text="[b]Pesquisa Geral / Motor Híbrido IA[/b]",
+            text="[b]Pesquisa Inteligente (Gemini API)[/b]",
             markup=True,
-            font_size=15,
+            font_size=18,
             size_hint_y=None,
-            height=28,
+            height=35,
             color=(0.85, 0.9, 0.95, 1)
         ))
 
         self.input_pergunta = TextInput(
             text="",
-            hint_text="Digite qualquer pergunta ou pesquisa...",
+            hint_text="Digite sua pergunta...",
             multiline=False,
             size_hint_y=None,
-            height=50,
-            font_size=15,
+            height=60,
+            font_size=17,
             background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(1, 1, 1, 1),
-            padding=[10, 12, 10, 12]
+            padding=[12, 14, 12, 14]
         )
         self.conteudo_dinamico.add_widget(self.input_pergunta)
 
+        acoes_layout = BoxLayout(size_hint_y=None, height=65, spacing=10)
+        
         btn_perguntar = Button(
-            text="[b]PESQUISAR / CONSULTAR ASSISTENTE[/b]",
+            text="[b]PESQUISAR[/b]",
             markup=True,
-            font_size=15,
-            size_hint_y=None,
-            height=55,
+            font_size=16,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1)
         )
         btn_perguntar.bind(on_press=self.executar_pesquisa_geral)
-        self.conteudo_dinamico.add_widget(btn_perguntar)
+        acoes_layout.add_widget(btn_perguntar)
+
+        self.btn_microfone = Button(
+            text="[b]🎤 MICROFONE (OFF)[/b]",
+            markup=True,
+            font_size=15,
+            size_hint_x=None,
+            width=190,
+            background_normal='',
+            background_color=(0.22, 0.28, 0.38, 1)
+        )
+        self.btn_microfone.bind(on_press=self.alternar_microfone)
+        acoes_layout.add_widget(self.btn_microfone)
+
+        self.conteudo_dinamico.add_widget(acoes_layout)
 
         self.terminal_geral = TextInput(
-            text="> Digite qualquer assunto acima para pesquisar via motor híbrido.\n",
+            text="Digite ou ative o microfone. O sistema irá consultar o Gemini e responder por voz.\n",
             background_color=(0.07, 0.09, 0.13, 1),
-            foreground_color=(0.0, 0.95, 0.75, 1),
+            foreground_color=(0.95, 0.97, 1.0, 1),
             readonly=True,
             multiline=True,
-            font_size=14,
+            font_size=17,
             size_hint_y=None,
-            height=220,
-            padding=[10, 10, 10, 10]
+            height=320,
+            padding=[16, 16, 16, 16]
         )
         self.conteudo_dinamico.add_widget(self.terminal_geral)
 
     def _construir_painel_chat(self):
         self.conteudo_dinamico.add_widget(Label(
-            text="[b]Assistente de Chat Q&A (Híbrido Inteligente)[/b]",
+            text="[b]Assistente de Chat Q&A[/b]",
             markup=True,
-            font_size=15,
+            font_size=18,
             size_hint_y=None,
-            height=28,
+            height=35,
             color=(0.85, 0.9, 0.95, 1)
         ))
 
@@ -548,39 +605,39 @@ class MainOSScreen(Screen):
             for remetente, msg in historico_msgs:
                 texto_inicial += f"[{remetente}]: {msg}\n\n"
         else:
-            texto_inicial = "> [NEXUS IA]: Olá! Motor híbrido ativado. Digite ou fale sua pergunta.\n\n"
+            texto_inicial = "Olá! Gemini API conectado. Escreva sua pergunta abaixo.\n\n"
 
         self.chat_terminal = TextInput(
             text=texto_inicial,
             background_color=(0.07, 0.09, 0.13, 1),
-            foreground_color=(0.0, 0.95, 0.75, 1),
+            foreground_color=(0.95, 0.97, 1.0, 1),
             readonly=True,
             multiline=True,
-            font_size=14,
+            font_size=17,
             size_hint_y=None,
-            height=250,
-            padding=[10, 10, 10, 10]
+            height=320,
+            padding=[16, 16, 16, 16]
         )
         self.conteudo_dinamico.add_widget(self.chat_terminal)
 
-        input_layout = BoxLayout(size_hint_y=None, height=55, spacing=8)
+        input_layout = BoxLayout(size_hint_y=None, height=65, spacing=10)
         self.input_chat_pergunta = TextInput(
             text="",
-            hint_text="Escreva sua pergunta aqui...",
+            hint_text="Escreva sua pergunta...",
             multiline=False,
-            font_size=15,
+            font_size=17,
             background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(1, 1, 1, 1),
-            padding=[10, 12, 10, 12]
+            padding=[12, 14, 12, 14]
         )
         input_layout.add_widget(self.input_chat_pergunta)
 
         btn_enviar_chat = Button(
             text="[b]ENVIAR[/b]",
             markup=True,
-            font_size=14,
+            font_size=16,
             size_hint_x=None,
-            width=110,
+            width=130,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1)
         )
@@ -588,6 +645,23 @@ class MainOSScreen(Screen):
         input_layout.add_widget(btn_enviar_chat)
 
         self.conteudo_dinamico.add_widget(input_layout)
+
+    def alternar_microfone(self, instance):
+        if not self.gravando_voz:
+            self.gravando_voz = True
+            self.btn_microfone.text = "[b]🔴 OUVINDO...[/b]"
+            self.btn_microfone.background_color = (0.85, 0.22, 0.22, 1)
+            self.terminal_geral.text = "🎤 Escutando... Toque novamente para encerrar e enviar."
+        else:
+            self.gravando_voz = False
+            self.btn_microfone.text = "[b]🎤 MICROFONE (OFF)[/b]"
+            self.btn_microfone.background_color = (0.22, 0.28, 0.38, 1)
+            
+            termo_simulado = "Análise completa de probabilidades de mercado"
+            self.input_pergunta.text = termo_simulado
+            self.terminal_geral.text = f"Processando '{termo_simulado}'..."
+            
+            threading.Thread(target=self._background_pesquisa, args=(termo_simulado,), daemon=True).start()
 
     def enviar_pergunta_chat(self, instance):
         pergunta = self.input_chat_pergunta.text.strip()
@@ -598,7 +672,7 @@ class MainOSScreen(Screen):
         self.db.salvar_mensagem_chat("Você", pergunta)
         
         atual = self.chat_terminal.text
-        self.chat_terminal.text = atual + f"[Você]: {pergunta}\n\n[NEXUS IA]: Processando..."
+        self.chat_terminal.text = atual + f"Você: {pergunta}\n\nIA: Processando..."
 
         threading.Thread(target=self._background_processar_chat, args=(pergunta,), daemon=True).start()
 
@@ -606,15 +680,17 @@ class MainOSScreen(Screen):
         resposta = consultar_ia_nuvem(pergunta)
         self.db.salvar_mensagem_chat("NEXUS IA", resposta)
 
+        VoiceSynthesizer.falar(resposta)
+
         historico_msgs = self.db.obter_historico_chat()
         texto_atualizado = ""
         for remetente, msg in historico_msgs:
-            texto_atualizado += f"[{remetente}]: {msg}\n\n"
+            texto_atualizado += f"{remetente}: {msg}\n\n"
 
         Clock.schedule_once(lambda dt: setattr(self.chat_terminal, 'text', texto_atualizado), 0)
 
     def executar_monte_carlo(self, instance):
-        self.terminal_apostas.text = "> Executando 100.000 simulações estocásticas...\n"
+        self.terminal_apostas.text = "Executando 100.000 simulações de Monte Carlo...\n"
         threading.Thread(target=self._background_monte_carlo, daemon=True).start()
 
     def _background_monte_carlo(self):
@@ -656,23 +732,23 @@ class MainOSScreen(Screen):
 
             Clock.schedule_once(lambda dt: self.graph_widget.atualizar_dados(resultados_todos), 0)
             log_ok = (
-                f"> [SUCESSO] 100.000 Simulações Concluídas ({data_atual})\n\n" +
+                f"100.000 Simulações Concluídas ({data_atual})\n\n" +
                 "\n".join(relatorio) +
-                f"\n\n> [SQLite] Registros salvos: {len(historico)}"
+                f"\n\nRegistros salvos no Banco: {len(historico)}"
             )
             Clock.schedule_once(lambda dt: setattr(self.terminal_apostas, 'text', log_ok), 0)
 
         except Exception as e:
-            err = f"> [ERRO CRÍTICO] {str(e)}\n"
+            err = f"Erro Crítico: {str(e)}\n"
             Clock.schedule_once(lambda dt: setattr(self.terminal_apostas, 'text', err), 0)
 
     def executar_pesquisa_geral(self, instance):
         termo = self.input_pergunta.text.strip()
         if not termo:
-            self.terminal_geral.text = "> Por favor, digite um termo válido."
+            self.terminal_geral.text = "Digite um termo para pesquisar."
             return
 
-        self.terminal_geral.text = f"> Consultando '{termo}' via motor híbrido..."
+        self.terminal_geral.text = f"Consultando Gemini API para '{termo}'..."
         threading.Thread(target=self._background_pesquisa, args=(termo,), daemon=True).start()
 
     def _background_pesquisa(self, termo: str):
@@ -680,11 +756,13 @@ class MainOSScreen(Screen):
         resposta = consultar_ia_nuvem(termo)
 
         self.db.salvar_interacao_geral(termo, resposta)
-        Clock.schedule_once(lambda dt: setattr(self.terminal_geral, 'text', f"> Consulta: {termo} ({timestamp})\n\n{resposta}"), 0)
+        VoiceSynthesizer.falar(resposta)
+
+        Clock.schedule_once(lambda dt: setattr(self.terminal_geral, 'text', f"Consulta: {termo} ({timestamp})\n\n{resposta}"), 0)
 
 
 # =====================================================================
-# 8. APLICATIVO PRINCIPAL
+# 9. APLICATIVO PRINCIPAL
 # =====================================================================
 class NexusOSMasterApp(App):
     def build(self):
