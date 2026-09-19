@@ -5,23 +5,30 @@ import random
 import math
 import datetime
 import urllib.request
+import json
 from dataclasses import dataclass
 from typing import List, Tuple
 
 # Kivy imports
 from kivy.app import App
+from kivy.core.window import Window
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.clock import Clock
-from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.graphics import Color, RoundedRectangle, Line, Rectangle
+
+# Desativa o efeito visual de toque (mancha/ripple) na tela
+from kivy.config import Config
+Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
 
 
 # =====================================================================
-# 1. VALIDAÇÃO DE CONEXÃO & DATA DO SISTEMA (Anti-Falsos Positivos)
+# 1. VALIDAÇÃO DE CONEXÃO & DATA DO SISTEMA
 # =====================================================================
 class NetworkTimeManager:
     @staticmethod
@@ -65,7 +72,7 @@ class BilheteSimulacao:
 
 
 # =====================================================================
-# 3. PERSISTÊNCIA ATÔMICA (SQLite)
+# 3. PERSISTÊNCIA ATÔMICA (SQLite com Contexto Seguro)
 # =====================================================================
 class NexusDatabase:
     def __init__(self, db_path="nexus_master_complete.db"):
@@ -73,175 +80,182 @@ class NexusDatabase:
         self._inicializar_banco()
 
     def _inicializar_banco(self):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS historico_bilhetes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data TEXT,
-                partida TEXT,
-                mercado TEXT,
-                odd REAL,
-                probabilidade REAL,
-                stake REAL,
-                retorno REAL
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS acessos_sistema (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                usuario TEXT UNIQUE,
-                chave_token TEXT,
-                nivel_permissao TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS historico_geral (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data TEXT,
-                pergunta TEXT,
-                resposta TEXT
-            )
-        ''')
-
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS chat_qa (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data TEXT,
-                remetente TEXT,
-                mensagem TEXT
-            )
-        ''')
-        
-        cursor.execute("SELECT COUNT(*) FROM acessos_sistema WHERE usuario = 'admin'")
-        if cursor.fetchone()[0] == 0:
-            cursor.execute(
-                "INSERT INTO acessos_sistema (usuario, chave_token, nivel_permissao) VALUES (?, ?, ?)",
-                ("admin", "nexus2026", "QUANT_MASTER")
-            )
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
             
-        conn.commit()
-        conn.close()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS historico_bilhetes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data TEXT,
+                    partida TEXT,
+                    mercado TEXT,
+                    odd REAL,
+                    probabilidade REAL,
+                    stake REAL,
+                    retorno REAL
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS acessos_sistema (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario TEXT UNIQUE,
+                    chave_token TEXT,
+                    nivel_permissao TEXT
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS historico_geral (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data TEXT,
+                    pergunta TEXT,
+                    resposta TEXT
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS chat_qa (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data TEXT,
+                    remetente TEXT,
+                    mensagem TEXT
+                )
+            ''')
+            
+            cursor.execute("SELECT COUNT(*) FROM acessos_sistema WHERE usuario = 'admin'")
+            if cursor.fetchone()[0] == 0:
+                cursor.execute(
+                    "INSERT INTO acessos_sistema (usuario, chave_token, nivel_permissao) VALUES (?, ?, ?)",
+                    ("admin", "nexus2026", "QUANT_MASTER")
+                )
+            conn.commit()
 
     def validar_acesso(self, usuario: str, chave: str) -> bool:
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM acessos_sistema WHERE usuario = ? AND chave_token = ?", (usuario, chave))
-        row = cursor.fetchone()
-        conn.close()
-        return row is not None
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM acessos_sistema WHERE usuario = ? AND chave_token = ?", (usuario, chave))
+            return cursor.fetchone() is not None
 
     def salvar_bilhete(self, b: BilheteSimulacao):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO historico_bilhetes (data, partida, mercado, odd, probabilidade, stake, retorno)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (b.data_hora, b.partida, b.mercado, b.odd_selecionada, b.probabilidade_estimada, b.stake_sugerida, b.retorno_potencial))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO historico_bilhetes (data, partida, mercado, odd, probabilidade, stake, retorno)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (b.data_hora, b.partida, b.mercado, b.odd_selecionada, b.probabilidade_estimada, b.stake_sugerida, b.retorno_potencial))
+            conn.commit()
 
     def salvar_interacao_geral(self, pergunta: str, resposta: str):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO historico_geral (data, pergunta, resposta)
-            VALUES (?, ?, ?)
-        ''', (NetworkTimeManager.obter_timestamp_atual(), pergunta, resposta))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO historico_geral (data, pergunta, resposta)
+                VALUES (?, ?, ?)
+            ''', (NetworkTimeManager.obter_timestamp_atual(), pergunta, resposta))
+            conn.commit()
 
     def salvar_mensagem_chat(self, remetente: str, mensagem: str):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO chat_qa (data, remetente, mensagem)
-            VALUES (?, ?, ?)
-        ''', (NetworkTimeManager.obter_timestamp_atual(), remetente, mensagem))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO chat_qa (data, remetente, mensagem)
+                VALUES (?, ?, ?)
+            ''', (NetworkTimeManager.obter_timestamp_atual(), remetente, mensagem))
+            conn.commit()
 
     def obter_historico_chat(self) -> List[Tuple]:
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT remetente, mensagem FROM chat_qa ORDER BY id ASC")
-        rows = cursor.fetchall()
-        conn.close()
-        return rows
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT remetente, mensagem FROM chat_qa ORDER BY id ASC")
+            return cursor.fetchall()
 
     def obter_historico(self) -> List[Tuple]:
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT data, partida, odd, retorno FROM historico_bilhetes ORDER BY id DESC LIMIT 5")
-        rows = cursor.fetchall()
-        conn.close()
-        return rows
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT data, partida, odd, retorno FROM historico_bilhetes ORDER BY id DESC LIMIT 5")
+            return cursor.fetchall()
 
 
 # =====================================================================
-# 4. RESILIÊNCIA DE REDE
+# 4. MOTOR HÍBRIDO DE INTELIGÊNCIA
 # =====================================================================
-def chamada_api_com_retry(func, max_tentativas=3, base_delay=1.0):
-    tentativa = 0
-    while tentativa < max_tentativas:
-        try:
-            return func()
-        except Exception as e:
-            tentativa += 1
-            if tentativa == max_tentativas:
-                raise RuntimeError(f"Falha de conexão com API externa após {max_tentativas} tentativas: {e}")
-            delay = base_delay * (2 ** (tentativa - 1)) + random.uniform(0, 0.5)
-            time.sleep(delay)
+def consultar_ia_nuvem(pergunta: str) -> str:
+    if not NetworkTimeManager.verificar_conexao_internet():
+        return gerar_resposta_base_local(pergunta, modo_offline=True)
+
+    try:
+        url = "https://api.duckduckgo.com/?q=" + urllib.parse.quote(pergunta) + "&format=json"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            abstract = data.get('AbstractText', '')
+            if abstract:
+                return f"[NEXUS IA (Web Search)]:\n{abstract}\n\nAnálise Concluída com sucesso via rede."
+            
+            related = data.get('RelatedTopics', [])
+            if related and isinstance(related, list):
+                for item in related:
+                    if 'Text' in item:
+                        return f"[NEXUS IA (Web Search)]:\n{item['Text']}\n\nFonte consultada na web."
+                        
+        return gerar_resposta_base_local(pergunta, modo_offline=False)
+    except Exception:
+        return gerar_resposta_base_local(pergunta, modo_offline=True)
+
+def gerar_resposta_base_local(pergunta: str, modo_offline: bool = False) -> str:
+    prefixo = "[Modo Offline Ativo - SQLite]" if modo_offline else "[Base Local Avançada]"
+    return (
+        f"{prefixo} Análise para: '{pergunta}'\n\n"
+        "• O sistema processou sua solicitação utilizando os parâmetros lógicos locais e seguros do seu SQLite."
+    )
 
 
 # =====================================================================
-# 5. TELA DE LOGIN (Bordas e Fontes Grandes)
+# 5. TELA DE LOGIN
 # =====================================================================
 class LoginScreen(Screen):
     def __init__(self, db: NexusDatabase, **kwargs):
         super().__init__(**kwargs)
         self.db = db
 
-        layout = BoxLayout(orientation='vertical', padding=30, spacing=22)
+        layout = BoxLayout(orientation='vertical', padding=24, spacing=18)
         layout.add_widget(Label(size_hint_y=None, height=20))
 
         lbl_titulo = Label(
-            text="[b]NEXUS QUANTUM OS[/b]\n[color=#00D9A3]Painel de Autenticação[/color]",
+            text="[b]NEXUS QUANTUM OS[/b]\n[color=#00D9A3]Painel de Autenticação Híbrido[/color]",
             markup=True,
             font_size=26,
             halign='center',
             size_hint_y=None,
-            height=100
+            height=90
         )
         layout.add_widget(lbl_titulo)
 
-        form_layout = GridLayout(cols=1, spacing=16, size_hint_y=None, height=240)
+        form_layout = GridLayout(cols=1, spacing=14, size_hint_y=None, height=220)
         
-        form_layout.add_widget(Label(text="Usuário Credenciado:", font_size=18, color=(0.8, 0.85, 0.9, 1), halign='left'))
+        form_layout.add_widget(Label(text="Usuário Credenciado:", font_size=16, color=(0.8, 0.85, 0.9, 1), halign='left'))
         self.input_usuario = TextInput(
             text="admin",
             multiline=False,
-            font_size=18,
-            background_color=(0.12, 0.15, 0.20, 1),
+            font_size=16,
+            background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(0.95, 0.97, 1.0, 1),
             cursor_color=(0.0, 0.85, 0.65, 1),
-            padding=[14, 18, 14, 18]
+            padding=[12, 14, 12, 14]
         )
         form_layout.add_widget(self.input_usuario)
 
-        form_layout.add_widget(Label(text="Chave de Acesso / Token:", font_size=18, color=(0.8, 0.85, 0.9, 1), halign='left'))
+        form_layout.add_widget(Label(text="Chave de Acesso / Token:", font_size=16, color=(0.8, 0.85, 0.9, 1), halign='left'))
         self.input_chave = TextInput(
             text="nexus2026",
             password=True,
             multiline=False,
-            font_size=18,
-            background_color=(0.12, 0.15, 0.20, 1),
+            font_size=16,
+            background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(0.95, 0.97, 1.0, 1),
             cursor_color=(0.0, 0.85, 0.65, 1),
-            padding=[14, 18, 14, 18]
+            padding=[12, 14, 12, 14]
         )
         form_layout.add_widget(self.input_chave)
         layout.add_widget(form_layout)
@@ -249,17 +263,17 @@ class LoginScreen(Screen):
         btn_login = Button(
             text="[b]AUTENTICAR E ACESSAR SISTEMA[/b]",
             markup=True,
-            font_size=18,
+            font_size=17,
             size_hint_y=None,
             height=70,
             background_normal='',
-            background_color=(0.0, 0.72, 0.52, 1),
+            background_color=(0.0, 0.78, 0.56, 1),
             color=(1, 1, 1, 1)
         )
         btn_login.bind(on_press=self.tentar_login)
         layout.add_widget(btn_login)
 
-        self.lbl_status = Label(text="", font_size=16, color=(1, 0.4, 0.4, 1), size_hint_y=None, height=45)
+        self.lbl_status = Label(text="", font_size=15, color=(1, 0.4, 0.4, 1), size_hint_y=None, height=40)
         layout.add_widget(self.lbl_status)
         self.add_widget(layout)
 
@@ -272,7 +286,7 @@ class LoginScreen(Screen):
 
 
 # =====================================================================
-# 6. WIDGET GRÁFICO ESTOCÁSTICO COM BORDAS
+# 6. GRÁFICO DE MONTE CARLO
 # =====================================================================
 class MonteCarloGraphWidget(BoxLayout):
     def __init__(self, **kwargs):
@@ -287,75 +301,81 @@ class MonteCarloGraphWidget(BoxLayout):
     def atualizar_canvas(self, *args):
         self.canvas.clear()
         with self.canvas:
-            Color(0.08, 0.10, 0.14, 1)
+            Color(0.09, 0.12, 0.17, 1)
             RoundedRectangle(pos=self.pos, size=self.size, radius=[12])
 
-            Color(0.15, 0.20, 0.28, 0.5)
+            Color(0.0, 0.85, 0.65, 0.25)
+            Line(rounded_rectangle=(self.x, self.y, self.width, self.height, 12), width=1.2)
+
+            Color(0.18, 0.24, 0.32, 0.6)
             for i in range(1, 4):
                 y_line = self.y + (self.height / 4) * i
-                Line(points=[self.x + 10, y_line, self.x + self.width - 10, y_line], width=1.2)
-
-            Color(0.0, 0.85, 0.65, 0.7)
-            Line(rounded_rectangle=(self.x, self.y, self.width, self.height, 12), width=1.8)
+                Line(points=[self.x + 12, y_line, self.x + self.width - 12, y_line], width=1)
 
             if not self.resultados:
                 return
 
-            num_bins = 10
+            num_bins = 12
             bins = [0] * num_bins
             for val in self.resultados:
                 idx = min(int(val * num_bins), num_bins - 1)
                 bins[idx] += 1
 
             max_freq = max(bins) if max(bins) > 0 else 1
-            w_barra = (self.width - 30) / num_bins
+            w_barra = (self.width - 32) / num_bins
             
             for i, freq in enumerate(bins):
                 h_barra = (freq / max_freq) * (self.height - 45)
-                x_barra = self.x + 15 + (i * w_barra) + 2
+                x_barra = self.x + 16 + (i * w_barra) + 2
                 y_barra = self.y + 20
                 
-                Color(0.0, 0.75, 0.55, 0.9)
-                RoundedRectangle(pos=(x_barra, y_barra), size=(w_barra - 4, h_barra), radius=[5])
+                Color(0.0, 0.82, 0.62, 0.95)
+                RoundedRectangle(pos=(x_barra, y_barra), size=(w_barra - 4, max(h_barra, 4)), radius=[5])
+                
+                Color(0.4, 0.95, 0.80, 0.6)
+                RoundedRectangle(pos=(x_barra, y_barra + max(h_barra - 4, 0)), size=(w_barra - 4, 4), radius=[2])
 
 
 # =====================================================================
-# 7. TELA PRINCIPAL (Navegação Inteira na Parte Inferior + Bordas)
+# 7. TELA PRINCIPAL (Com ScrollView Integrado)
 # =====================================================================
 class MainOSScreen(Screen):
     def __init__(self, db: NexusDatabase, **kwargs):
         super().__init__(**kwargs)
         self.db = db
 
-        layout = BoxLayout(orientation='vertical', padding=15, spacing=10)
+        layout = BoxLayout(orientation='vertical', padding=8, spacing=6)
 
-        # Parte Superior Limpa (Apenas status discreto sem botões em cima)
         self.topo_status = Label(
             text="[color=#00D9A3]● SISTEMA VERIFICADO[/color] | Sincronizando...",
             markup=True,
             font_size=15,
             size_hint_y=None,
-            height=30,
+            height=28,
             halign='center'
         )
         layout.add_widget(self.topo_status)
 
-        # Container dinâmico central (Conteúdo da Aba Ativa)
-        self.conteudo_dinamico = BoxLayout(orientation='vertical', spacing=10)
-        layout.add_widget(self.conteudo_dinamico)
+        # ScrollView aplicado para garantir responsividade total em qualquer tela
+        self.scroll_view = ScrollView(size_hint=(1, 1), do_scroll_x=False)
+        self.conteudo_dinamico = BoxLayout(orientation='vertical', spacing=8, size_hint_y=None)
+        self.conteudo_dinamico.bind(minimum_height=self.conteudo_dinamico.setter('height'))
+        self.scroll_view.add_widget(self.conteudo_dinamico)
+        layout.add_widget(self.scroll_view)
 
-        # BARRA DE NAVEGAÇÃO E BOTÕES TOTALMENTE NA PARTE INFERIOR DO APP
-        barra_inferior = BoxLayout(orientation='vertical', size_hint_y=None, height=130, spacing=8)
+        # -------------------------------------------------------------
+        # BARRA INFERIOR FIXA
+        # -------------------------------------------------------------
+        barra_inferior = BoxLayout(orientation='vertical', size_hint_y=None, height=190, spacing=6)
 
-        # Botões de Abas embaixo
-        abas_layout = BoxLayout(size_hint_y=None, height=60, spacing=8)
+        abas_layout = BoxLayout(size_hint_y=None, height=100, spacing=8)
         
         self.btn_aba_apostas = Button(
             text="[b]APOSTAS[/b]",
             markup=True,
-            font_size=15,
+            font_size=18,
             background_normal='',
-            background_color=(0.0, 0.6, 0.45, 1)
+            background_color=(0.0, 0.68, 0.50, 1)
         )
         self.btn_aba_apostas.bind(on_press=lambda x: self.mudar_aba('apostas'))
         abas_layout.add_widget(self.btn_aba_apostas)
@@ -363,9 +383,9 @@ class MainOSScreen(Screen):
         self.btn_aba_geral = Button(
             text="[b]PESQUISA[/b]",
             markup=True,
-            font_size=15,
+            font_size=18,
             background_normal='',
-            background_color=(0.15, 0.20, 0.28, 1)
+            background_color=(0.16, 0.22, 0.30, 1)
         )
         self.btn_aba_geral.bind(on_press=lambda x: self.mudar_aba('geral'))
         abas_layout.add_widget(self.btn_aba_geral)
@@ -373,22 +393,23 @@ class MainOSScreen(Screen):
         self.btn_aba_chat = Button(
             text="[b]CHAT Q&A IA[/b]",
             markup=True,
-            font_size=15,
+            font_size=18,
             background_normal='',
-            background_color=(0.15, 0.20, 0.28, 1)
+            background_color=(0.16, 0.22, 0.30, 1)
         )
         self.btn_aba_chat.bind(on_press=lambda x: self.mudar_aba('chat'))
         abas_layout.add_widget(self.btn_aba_chat)
 
         barra_inferior.add_widget(abas_layout)
 
-        # Botão de Encerramento de Sessão na base inferior
         btn_sair = Button(
-            text="Encerrar Sessão",
+            text="[b]ENCERRAR SESSÃO[/b]",
+            markup=True,
+            font_size=16,
             size_hint_y=None,
-            height=54,
-            font_size=15,
-            background_color=(0.8, 0.2, 0.2, 1)
+            height=75,
+            background_normal='',
+            background_color=(0.85, 0.22, 0.22, 1)
         )
         btn_sair.bind(on_press=lambda x: setattr(self.manager, 'current', 'login'))
         barra_inferior.add_widget(btn_sair)
@@ -401,34 +422,34 @@ class MainOSScreen(Screen):
 
     def atualizar_status_sistema(self, dt):
         online = NetworkTimeManager.verificar_conexao_internet()
-        status_str = "[color=#00D9A3]● INTERNET ATIVA[/color]" if online else "[color=#FF4444]○ MODO OFFLINE LOCAL[/color]"
+        status_str = "[color=#00D9A3]● MODO HÍBRIDO ONLINE[/color]" if online else "[color=#FF4444]○ MODO OFFLINE LOCAL[/color]"
         hora_str = NetworkTimeManager.obter_timestamp_atual()
         self.topo_status.text = f"{status_str} | Time: {hora_str}"
 
     def mudar_aba(self, aba: str):
         self.conteudo_dinamico.clear_widgets()
-        self.btn_aba_apostas.background_color = (0.15, 0.20, 0.28, 1)
-        self.btn_aba_geral.background_color = (0.15, 0.20, 0.28, 1)
-        self.btn_aba_chat.background_color = (0.15, 0.20, 0.28, 1)
+        self.btn_aba_apostas.background_color = (0.16, 0.22, 0.30, 1)
+        self.btn_aba_geral.background_color = (0.16, 0.22, 0.30, 1)
+        self.btn_aba_chat.background_color = (0.16, 0.22, 0.30, 1)
 
         if aba == 'apostas':
-            self.btn_aba_apostas.background_color = (0.0, 0.6, 0.45, 1)
+            self.btn_aba_apostas.background_color = (0.0, 0.68, 0.50, 1)
             self._construir_painel_apostas()
         elif aba == 'geral':
-            self.btn_aba_geral.background_color = (0.0, 0.6, 0.45, 1)
+            self.btn_aba_geral.background_color = (0.0, 0.68, 0.50, 1)
             self._construir_painel_geral()
         elif aba == 'chat':
-            self.btn_aba_chat.background_color = (0.0, 0.6, 0.45, 1)
+            self.btn_aba_chat.background_color = (0.0, 0.68, 0.50, 1)
             self._construir_painel_chat()
 
     def _construir_painel_apostas(self):
-        form_layout = GridLayout(cols=2, spacing=10, size_hint_y=None, height=90)
-        form_layout.add_widget(Label(text="Banca Inicial (R$):", font_size=16, color=(0.8, 0.85, 0.9, 1)))
-        self.input_banca = TextInput(text="1000.0", multiline=False, font_size=16, background_color=(0.12, 0.15, 0.20, 1), foreground_color=(1,1,1,1), padding=[12,14,12,14])
+        form_layout = GridLayout(cols=2, spacing=8, size_hint_y=None, height=85)
+        form_layout.add_widget(Label(text="Banca Inicial (R$):", font_size=16, color=(0.85, 0.9, 0.95, 1)))
+        self.input_banca = TextInput(text="1000.0", multiline=False, font_size=16, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[10,12,10,12])
         form_layout.add_widget(self.input_banca)
 
-        form_layout.add_widget(Label(text="Risco Máximo (%):", font_size=16, color=(0.8, 0.85, 0.9, 1)))
-        self.input_risco = TextInput(text="2.0", multiline=False, font_size=16, background_color=(0.12, 0.15, 0.20, 1), foreground_color=(1,1,1,1), padding=[12,14,12,14])
+        form_layout.add_widget(Label(text="Risco Máximo (%):", font_size=16, color=(0.85, 0.9, 0.95, 1)))
+        self.input_risco = TextInput(text="2.0", multiline=False, font_size=16, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[10,12,10,12])
         form_layout.add_widget(self.input_risco)
         self.conteudo_dinamico.add_widget(form_layout)
 
@@ -439,35 +460,38 @@ class MainOSScreen(Screen):
             size_hint_y=None,
             height=60,
             background_normal='',
-            background_color=(0.0, 0.72, 0.52, 1),
+            background_color=(0.0, 0.78, 0.56, 1),
             color=(1, 1, 1, 1)
         )
         btn_simular.bind(on_press=self.executar_monte_carlo)
         self.conteudo_dinamico.add_widget(btn_simular)
 
-        self.conteudo_dinamico.add_widget(Label(text="[b]Distribuição Estocástica das Probabilidades:[/b]", markup=True, font_size=14, size_hint_y=None, height=25, color=(0.8, 0.85, 0.9, 1)))
-        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=130)
+        self.conteudo_dinamico.add_widget(Label(text="[b]Distribuição Estocástica das Probabilidades:[/b]", markup=True, font_size=14, size_hint_y=None, height=24, color=(0.85, 0.9, 0.95, 1)))
+        
+        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=135)
         self.conteudo_dinamico.add_widget(self.graph_widget)
 
         self.terminal_apostas = TextInput(
-            text="> Módulo Quantitativo pronto. 100.000 iterações por partida ativas.\n> Validação estrita e SQLite atômico prontos.\n",
-            background_color=(0.06, 0.08, 0.11, 1),
-            foreground_color=(0.0, 0.9, 0.7, 1),
+            text="> Módulo Quantitativo pronto. 100.000 iterações ativas.\n",
+            background_color=(0.07, 0.09, 0.13, 1),
+            foreground_color=(0.0, 0.95, 0.75, 1),
             readonly=True,
             multiline=True,
             font_size=14,
-            padding=[12, 12, 12, 12]
+            size_hint_y=None,
+            height=150,
+            padding=[10, 10, 10, 10]
         )
         self.conteudo_dinamico.add_widget(self.terminal_apostas)
 
     def _construir_painel_geral(self):
         self.conteudo_dinamico.add_widget(Label(
-            text="[b]Pesquisa Geral / Assistente com IA & Web Search[/b]",
+            text="[b]Pesquisa Geral / Motor Híbrido IA[/b]",
             markup=True,
             font_size=15,
             size_hint_y=None,
-            height=30,
-            color=(0.8, 0.85, 0.9, 1)
+            height=28,
+            color=(0.85, 0.9, 0.95, 1)
         ))
 
         self.input_pergunta = TextInput(
@@ -475,11 +499,11 @@ class MainOSScreen(Screen):
             hint_text="Digite qualquer pergunta ou pesquisa...",
             multiline=False,
             size_hint_y=None,
-            height=52,
+            height=50,
             font_size=15,
-            background_color=(0.12, 0.15, 0.20, 1),
+            background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(1, 1, 1, 1),
-            padding=[12, 14, 12, 14]
+            padding=[10, 12, 10, 12]
         )
         self.conteudo_dinamico.add_widget(self.input_pergunta)
 
@@ -488,32 +512,34 @@ class MainOSScreen(Screen):
             markup=True,
             font_size=15,
             size_hint_y=None,
-            height=58,
+            height=55,
             background_normal='',
-            background_color=(0.0, 0.72, 0.52, 1)
+            background_color=(0.0, 0.78, 0.56, 1)
         )
         btn_perguntar.bind(on_press=self.executar_pesquisa_geral)
         self.conteudo_dinamico.add_widget(btn_perguntar)
 
         self.terminal_geral = TextInput(
-            text="> Digite qualquer assunto acima para pesquisar sem sair do sistema.\n",
-            background_color=(0.06, 0.08, 0.11, 1),
-            foreground_color=(0.0, 0.9, 0.7, 1),
+            text="> Digite qualquer assunto acima para pesquisar via motor híbrido.\n",
+            background_color=(0.07, 0.09, 0.13, 1),
+            foreground_color=(0.0, 0.95, 0.75, 1),
             readonly=True,
             multiline=True,
             font_size=14,
-            padding=[12, 12, 12, 12]
+            size_hint_y=None,
+            height=220,
+            padding=[10, 10, 10, 10]
         )
         self.conteudo_dinamico.add_widget(self.terminal_geral)
 
     def _construir_painel_chat(self):
         self.conteudo_dinamico.add_widget(Label(
-            text="[b]Assistente de Chat Q&A (Tempo Real)[/b]",
+            text="[b]Assistente de Chat Q&A (Híbrido Inteligente)[/b]",
             markup=True,
             font_size=15,
             size_hint_y=None,
-            height=30,
-            color=(0.8, 0.85, 0.9, 1)
+            height=28,
+            color=(0.85, 0.9, 0.95, 1)
         ))
 
         historico_msgs = self.db.obter_historico_chat()
@@ -522,29 +548,30 @@ class MainOSScreen(Screen):
             for remetente, msg in historico_msgs:
                 texto_inicial += f"[{remetente}]: {msg}\n\n"
         else:
-            texto_inicial = "> [NEXUS IA]: Olá! Faça sua pergunta abaixo. Estou pronto para responder.\n\n"
+            texto_inicial = "> [NEXUS IA]: Olá! Motor híbrido ativado. Digite ou fale sua pergunta.\n\n"
 
         self.chat_terminal = TextInput(
             text=texto_inicial,
-            background_color=(0.06, 0.08, 0.11, 1),
-            foreground_color=(0.0, 0.9, 0.7, 1),
+            background_color=(0.07, 0.09, 0.13, 1),
+            foreground_color=(0.0, 0.95, 0.75, 1),
             readonly=True,
             multiline=True,
             font_size=14,
-            padding=[12, 12, 12, 12],
-            size_hint_y=1
+            size_hint_y=None,
+            height=250,
+            padding=[10, 10, 10, 10]
         )
         self.conteudo_dinamico.add_widget(self.chat_terminal)
 
-        input_layout = BoxLayout(size_hint_y=None, height=56, spacing=10)
+        input_layout = BoxLayout(size_hint_y=None, height=55, spacing=8)
         self.input_chat_pergunta = TextInput(
             text="",
             hint_text="Escreva sua pergunta aqui...",
             multiline=False,
             font_size=15,
-            background_color=(0.12, 0.15, 0.20, 1),
+            background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(1, 1, 1, 1),
-            padding=[12, 14, 12, 14]
+            padding=[10, 12, 10, 12]
         )
         input_layout.add_widget(self.input_chat_pergunta)
 
@@ -553,9 +580,9 @@ class MainOSScreen(Screen):
             markup=True,
             font_size=14,
             size_hint_x=None,
-            width=120,
+            width=110,
             background_normal='',
-            background_color=(0.0, 0.72, 0.52, 1)
+            background_color=(0.0, 0.78, 0.56, 1)
         )
         btn_enviar_chat.bind(on_press=self.enviar_pergunta_chat)
         input_layout.add_widget(btn_enviar_chat)
@@ -571,19 +598,12 @@ class MainOSScreen(Screen):
         self.db.salvar_mensagem_chat("Você", pergunta)
         
         atual = self.chat_terminal.text
-        self.chat_terminal.text = atual + f"[Você]: {pergunta}\n\n[NEXUS IA]: Pensando..."
+        self.chat_terminal.text = atual + f"[Você]: {pergunta}\n\n[NEXUS IA]: Processando..."
 
         threading.Thread(target=self._background_processar_chat, args=(pergunta,), daemon=True).start()
 
     def _background_processar_chat(self, pergunta: str):
-        time.sleep(1.0)
-        online = NetworkTimeManager.verificar_conexao_internet()
-        
-        if online:
-            resposta = f"Compreendi sua dúvida sobre '{pergunta}'. Diretriz validada em tempo real com sucesso."
-        else:
-            resposta = f"Compreendi sua dúvida sobre '{pergunta}'. Modo offline ativado via SQLite local."
-
+        resposta = consultar_ia_nuvem(pergunta)
         self.db.salvar_mensagem_chat("NEXUS IA", resposta)
 
         historico_msgs = self.db.obter_historico_chat()
@@ -603,14 +623,11 @@ class MainOSScreen(Screen):
             risco = float(self.input_risco.text)
             data_atual = NetworkTimeManager.obter_timestamp_atual()
 
-            def fetch_mock():
-                return [
-                    Partida("Flamengo", "Palmeiras", "Brasileirão", 2.10, 3.40, 3.20),
-                    Partida("Real Madrid", "Barcelona", "La Liga", 1.95, 3.60, 3.80),
-                    Partida("Manchester City", "Arsenal", "Premier League", 1.80, 3.70, 4.20)
-                ]
-
-            partidas = chamada_api_com_retry(fetch_mock)
+            partidas = [
+                Partida("Flamengo", "Palmeiras", "Brasileirão", 2.10, 3.40, 3.20),
+                Partida("Real Madrid", "Barcelona", "La Liga", 1.95, 3.60, 3.80),
+                Partida("Manchester City", "Arsenal", "Premier League", 1.80, 3.70, 4.20)
+            ]
 
             resultados_todos = []
             relatorio = []
@@ -655,20 +672,15 @@ class MainOSScreen(Screen):
             self.terminal_geral.text = "> Por favor, digite um termo válido."
             return
 
-        self.terminal_geral.text = f"> Consultando '{termo}'..."
+        self.terminal_geral.text = f"> Consultando '{termo}' via motor híbrido..."
         threading.Thread(target=self._background_pesquisa, args=(termo,), daemon=True).start()
 
     def _background_pesquisa(self, termo: str):
-        online = NetworkTimeManager.verificar_conexao_internet()
         timestamp = NetworkTimeManager.obter_timestamp_atual()
-
-        if online:
-            resposta = f"[{timestamp}] [WEB SEARCH] Resposta para '{termo}': Dados obtidos com sucesso."
-        else:
-            resposta = f"[{timestamp}] [OFFLINE] Resposta gerada via SQLite local."
+        resposta = consultar_ia_nuvem(termo)
 
         self.db.salvar_interacao_geral(termo, resposta)
-        Clock.schedule_once(lambda dt: setattr(self.terminal_geral, 'text', f"> Consulta: {termo}\n\n{resposta}"), 0)
+        Clock.schedule_once(lambda dt: setattr(self.terminal_geral, 'text', f"> Consulta: {termo} ({timestamp})\n\n{resposta}"), 0)
 
 
 # =====================================================================
