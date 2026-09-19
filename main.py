@@ -13,7 +13,8 @@ from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
 from kivy.core.window import Window
 from kivy.clock import mainthread
-from kivy.graphics import Color, RoundedRectangle
+from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.input.motionevent import MotionEvent
 
 try:
     from jnius import autoclass
@@ -27,21 +28,37 @@ except Exception:
 CACHE_FILE = "nexus_cache.json"
 CONFIG_FILE = "nexus_config.enc"
 HISTORY_FILE = "nexus_historico.json"
-SECRET_FILE = "config.json" # Arquivo seguro local (não versionado no Git)
+SECRET_FILE = "config.json"
 
 file_lock = threading.Lock()
-Window.clearcolor = (0.03, 0.05, 0.10, 1)
+Window.clearcolor = (0.01, 0.03, 0.07, 1)
 
-class AppIconButton(Button):
-    def __init__(self, bg_color=(0.1, 0.5, 0.8, 1), **kwargs):
+class CyberPanel(BoxLayout):
+    def __init__(self, border_color=(0, 0.94, 1, 0.6), bg_color=(0.02, 0.07, 0.15, 1), radius=[16], **kwargs):
+        super().__init__(**kwargs)
+        self.bg_color = bg_color
+        self.border_color = border_color
+        self.radius_val = radius
+        self.bind(size=self.update_canvas, pos=self.update_canvas)
+
+    def update_canvas(self, *args):
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*self.bg_color)
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=self.radius_val)
+            Color(*self.border_color)
+            self.line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, self.radius_val[0]), width=1.2)
+
+class CyberButton(Button):
+    def __init__(self, neon_color=(0, 0.94, 1, 1), **kwargs):
         super().__init__(**kwargs)
         self.background_normal = ''
         self.background_down = ''
         self.background_color = (0, 0, 0, 0)
-        self.bg_color = bg_color
+        self.neon_color = neon_color
         self.color = (1, 1, 1, 1)
         self.bold = True
-        self.font_size = 15
+        self.font_size = 14
         self.halign = 'center'
         self.valign = 'middle'
         self.bind(size=self.update_canvas, pos=self.update_canvas)
@@ -49,134 +66,205 @@ class AppIconButton(Button):
     def update_canvas(self, *args):
         self.canvas.before.clear()
         with self.canvas.before:
-            Color(*self.bg_color)
-            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[16])
+            Color(0.04, 0.10, 0.22, 1)
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[12])
+            Color(*self.neon_color)
+            self.line = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, 12), width=1.5)
+
+class ZoomableTextInput(TextInput):
+    """
+    TextInput avançado com suporte a gestos de pinça (Pinch to Zoom) 
+    para redimensionar o texto dinamicamente no celular.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.touch_points = {}
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self.touch_points[touch.uid] = touch
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if touch.uid in self.touch_points:
+            self.touch_points[touch.uid] = touch
+            # Se dois dedos estiverem na tela ao mesmo tempo (gesto de pinça)
+            if len(self.touch_points) == 2:
+                pts = list(self.touch_points.values())
+                dist_atual = math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+                
+                # Guarda a distância inicial para calcular a expansão ou redução
+                if not hasattr(self, '_dist_inicial') or self._dist_inicial is None:
+                    self._dist_inicial = dist_atual
+
+                diff = dist_atual - self._dist_inicial
+                if abs(diff) > 30:  # Limiar para evitar zoom sensível demais
+                    if diff > 0 and self.font_size < 28:
+                        self.font_size += 0.5
+                    elif diff < 0 and self.font_size > 10:
+                        self.font_size -= 0.5
+                    self._dist_inicial = dist_atual
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if touch.uid in self.touch_points:
+            del self.touch_points[touch.uid]
+        if len(self.touch_points) < 2:
+            self._dist_inicial = None
+        return super().on_touch_up(touch)
 
 class NexusQuantumApp(App):
     def build(self):
-        layout = BoxLayout(orientation='vertical', padding=10, spacing=8)
+        layout = BoxLayout(orientation='vertical', padding=16, spacing=12)
 
         self.titulo = Label(
-            text="[b][color=#00ffcc]NEXUS QUANTUM // 100k + BANCA + HISTÓRICO[/color][/b]",
+            text="[b][color=#00f0ff]NEXUS QUANTUM[/color] [color=#bd00ff]// 100K CORE[/color][/b]",
             markup=True,
-            font_size=16,
+            font_size=18,
             size_hint_y=None,
-            height=34,
+            height=38,
             halign='center',
             valign='middle'
         )
         self.titulo.bind(size=self.titulo.setter('text_size'))
         layout.add_widget(self.titulo)
 
-        layout_banca = BoxLayout(orientation='horizontal', size_hint_y=None, height=44, spacing=6)
+        # Bloco de Banca
+        painel_banca = CyberPanel(
+            border_color=(0, 0.94, 1, 0.5),
+            size_hint_y=None,
+            height=54,
+            padding=8,
+            spacing=8
+        )
         
         self.txt_banca = TextInput(
             text=self.obter_config("banca_valor", "100.0"),
             hint_text='Banca (R$)...',
             multiline=False,
             size_hint_x=0.45,
-            background_color=(0.07, 0.11, 0.20, 1),
-            foreground_color=(1, 1, 1, 1),
+            background_color=(0.01, 0.04, 0.10, 1),
+            foreground_color=(0, 0.94, 1, 1),
+            cursor_color=(0, 0.94, 1, 1),
             font_size=14,
-            padding=[6, 10, 6, 10]
+            padding=[10, 10, 10, 10]
         )
-        layout_banca.add_widget(self.txt_banca)
+        painel_banca.add_widget(self.txt_banca)
 
         self.txt_risco = TextInput(
             text=self.obter_config("risco_pct", "2.0"),
             hint_text='Risco (%/Aposta)...',
             multiline=False,
             size_hint_x=0.40,
-            background_color=(0.07, 0.11, 0.20, 1),
-            foreground_color=(1, 1, 1, 1),
+            background_color=(0.01, 0.04, 0.10, 1),
+            foreground_color=(0, 0.94, 1, 1),
+            cursor_color=(0, 0.94, 1, 1),
             font_size=14,
-            padding=[6, 10, 6, 10]
+            padding=[10, 10, 10, 10]
         )
-        layout_banca.add_widget(self.txt_risco)
+        painel_banca.add_widget(self.txt_risco)
         
-        self.btn_salvar_banca = AppIconButton(
+        self.btn_salvar_banca = CyberButton(
             text='💾',
-            bg_color=(0.15, 0.55, 0.35, 1),
+            neon_color=(0.15, 0.85, 0.45, 1),
             size_hint_x=0.15
         )
         self.btn_salvar_banca.bind(on_press=self.salvar_configuracoes_banca)
-        layout_banca.add_widget(self.btn_salvar_banca)
-        layout.add_widget(layout_banca)
+        painel_banca.add_widget(self.btn_salvar_banca)
+        
+        layout.add_widget(painel_banca)
 
-        self.txt_chat_ia = TextInput(
-            text="[Nexus AI Engine]: Sistema blindado e pronto. Insira sua banca, configure o risco e clique em 'Gerar Bilhete 100k'.",
-            background_color=(0.02, 0.04, 0.08, 1),
-            foreground_color=(0.25, 1, 0.65, 1),
+        # Visor Central com a nova tecnologia de Zoom por Pinça (Pinch to Zoom)
+        painel_visor = CyberPanel(
+            border_color=(0.74, 0, 1, 0.6),
+            bg_color=(0.015, 0.04, 0.09, 1),
+            size_hint_y=0.38,
+            padding=6
+        )
+        
+        self.txt_chat_ia = ZoomableTextInput(
+            text="[Nexus AI Engine]: Sistema blindado e sincronizado.\n💡 Dica: Use dois dedos em pinça (aproximar/afastar) nesta caixa para dar ZOOM nos números e letras!",
+            background_color=(0, 0, 0, 0),
+            foreground_color=(0.20, 1, 0.80, 1),
+            cursor_color=(0.20, 1, 0.80, 1),
             readonly=False,
             multiline=True,
-            font_size=18,
-            size_hint_y=0.38,
-            padding=[10, 10, 10, 10]
+            font_size=16,
+            padding=[14, 14, 14, 14]
         )
-        layout.add_widget(self.txt_chat_ia)
+        painel_visor.add_widget(self.txt_chat_ia)
+        layout.add_widget(painel_visor)
 
-        grid_botoes = GridLayout(cols=2, spacing=8, size_hint_y=None, height=140)
+        grid_botoes = GridLayout(cols=2, spacing=10, size_hint_y=None, height=140)
 
-        self.btn_jogos_hoje = AppIconButton(
+        self.btn_jogos_hoje = CyberButton(
             text='🎲 Gerar Bilhete 100k',
-            bg_color=(0.10, 0.65, 0.35, 1)
+            neon_color=(0, 0.94, 1, 1)
         )
         self.btn_jogos_hoje.bind(on_press=lambda x: self.disparar_processamento_async())
         grid_botoes.add_widget(self.btn_jogos_hoje)
 
-        self.btn_historico = AppIconButton(
+        self.btn_historico = CyberButton(
             text='📂 Ver Histórico',
-            bg_color=(0.15, 0.45, 0.85, 1)
+            neon_color=(0.30, 0.50, 1, 1)
         )
         self.btn_historico.bind(on_press=lambda x: self.exibir_historico_salvo())
         grid_botoes.add_widget(self.btn_historico)
 
-        self.btn_ia_generativa = AppIconButton(
+        self.btn_ia_generativa = CyberButton(
             text='🧠 Parecer Quântico (Gemini)',
-            bg_color=(0.60, 0.15, 0.65, 1)
+            neon_color=(0.74, 0, 1, 1)
         )
         self.btn_ia_generativa.bind(on_press=lambda x: self.executar_analise_ia_generativa())
         grid_botoes.add_widget(self.btn_ia_generativa)
 
-        self.btn_testar_net = AppIconButton(
+        self.btn_testar_net = CyberButton(
             text='🌐 Testar Conexão',
-            bg_color=(0.85, 0.45, 0.10, 1)
+            neon_color=(1, 0.55, 0, 1)
         )
         self.btn_testar_net.bind(on_press=lambda x: self.testar_conexao_internet())
         grid_botoes.add_widget(self.btn_testar_net)
 
         layout.add_widget(grid_botoes)
 
-        layout_barra_ia = BoxLayout(orientation='horizontal', size_hint_y=None, height=52, spacing=6)
+        # Barra Inferior com margens e input de consulta rápida
+        painel_barra = CyberPanel(
+            border_color=(0, 0.94, 1, 0.4),
+            size_hint_y=None,
+            height=54,
+            padding=8,
+            spacing=8
+        )
         
-        self.btn_voz_barra = AppIconButton(
+        self.btn_voz_barra = CyberButton(
             text='🎙️',
-            bg_color=(0.20, 0.30, 0.50, 1),
+            neon_color=(0.30, 0.50, 1, 1),
             size_hint_x=0.15
         )
         self.btn_voz_barra.bind(on_press=lambda x: self.iniciar_captura_voz())
-        layout_barra_ia.add_widget(self.btn_voz_barra)
+        painel_barra.add_widget(self.btn_voz_barra)
 
         self.txt_pergunta_livre = TextInput(
             hint_text='Consultar time ou status...',
             multiline=False,
             size_hint_x=0.60,
-            background_color=(0.07, 0.11, 0.20, 1),
-            foreground_color=(1, 1, 1, 1),
-            font_size=15,
-            padding=[8, 12, 8, 12]
+            background_color=(0.01, 0.04, 0.10, 1),
+            foreground_color=(0, 0.94, 1, 1),
+            cursor_color=(0, 0.94, 1, 1),
+            font_size=14,
+            padding=[10, 10, 10, 10]
         )
-        layout_barra_ia.add_widget(self.txt_pergunta_livre)
+        painel_barra.add_widget(self.txt_pergunta_livre)
 
-        self.btn_perguntar_ia = AppIconButton(
+        self.btn_perguntar_ia = CyberButton(
             text='➤ Enviar',
-            bg_color=(0.45, 0.15, 0.75, 1),
+            neon_color=(0.74, 0, 1, 1),
             size_hint_x=0.25
         )
         self.btn_perguntar_ia.bind(on_press=lambda x: self.processar_pergunta_livre())
-        layout_barra_ia.add_widget(self.btn_perguntar_ia)
+        painel_barra.add_widget(self.btn_perguntar_ia)
 
-        layout.add_widget(layout_barra_ia)
+        layout.add_widget(painel_barra)
 
         self.inicializar_cofre()
         return layout
@@ -199,7 +287,6 @@ class NexusQuantumApp(App):
             return padrao
 
     def obter_chave_gemini(self):
-        """Lê a chave do arquivo local de configuração isolado"""
         if os.path.exists(SECRET_FILE):
             try:
                 with open(SECRET_FILE, 'r', encoding='utf-8') as f:
@@ -222,7 +309,7 @@ class NexusQuantumApp(App):
             try:
                 with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                     json.dump(dados, f, ensure_ascii=False)
-                self.atualizar_interface_texto("[Nexus AI]: Gestão de banca atualizada e salva com segurança.")
+                self.atualizar_interface_texto("[Nexus AI]: Gestão de banca atualizada e blindada com sucesso.")
             except Exception as e:
                 self.atualizar_interface_texto(f"Erro ao salvar banca: {e}")
 
