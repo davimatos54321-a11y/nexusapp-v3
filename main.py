@@ -408,7 +408,7 @@ class MainOSScreen(Screen):
         self.db = db
         self.gravando_voz = False
 
-        layout = BoxLayout(orientation='vertical', padding=[24, 16, 24, 16], spacing=12)
+        layout = BoxLayout(orientation='vertical', padding=[16, 12, 16, 12], spacing=10)
 
         self.scroll_view = ScrollView(size_hint=(1, 1), do_scroll_x=False)
         self.conteudo_dinamico = BoxLayout(orientation='vertical', spacing=14, size_hint_y=None)
@@ -416,14 +416,14 @@ class MainOSScreen(Screen):
         self.scroll_view.add_widget(self.conteudo_dinamico)
         layout.add_widget(self.scroll_view)
 
-        barra_inferior = BoxLayout(orientation='vertical', size_hint_y=None, height=270, spacing=10)
+        barra_inferior = BoxLayout(orientation='vertical', size_hint_y=None, height=130, spacing=8)
 
-        abas_layout = BoxLayout(size_hint_y=None, height=65, spacing=10)
+        abas_layout = BoxLayout(size_hint_y=None, height=50, spacing=8)
         
         self.btn_aba_apostas = Button(
             text="[b]APOSTAS[/b]",
             markup=True,
-            font_size=16,
+            font_size=15,
             background_normal='',
             background_color=(0.0, 0.68, 0.50, 1)
         )
@@ -433,7 +433,7 @@ class MainOSScreen(Screen):
         self.btn_aba_geral = Button(
             text="[b]PESQUISA[/b]",
             markup=True,
-            font_size=16,
+            font_size=15,
             background_normal='',
             background_color=(0.16, 0.22, 0.30, 1)
         )
@@ -443,7 +443,7 @@ class MainOSScreen(Screen):
         self.btn_aba_chat = Button(
             text="[b]CHAT Q&A[/b]",
             markup=True,
-            font_size=16,
+            font_size=15,
             background_normal='',
             background_color=(0.16, 0.22, 0.30, 1)
         )
@@ -455,9 +455,9 @@ class MainOSScreen(Screen):
         btn_sair = Button(
             text="[b]ENCERRAR SESSÃO[/b]",
             markup=True,
-            font_size=16,
+            font_size=15,
             size_hint_y=None,
-            height=55,
+            height=45,
             background_normal='',
             background_color=(0.85, 0.22, 0.22, 1)
         )
@@ -486,22 +486,22 @@ class MainOSScreen(Screen):
             self._construir_painel_chat()
 
     def _construir_painel_apostas(self):
-        form_layout = GridLayout(cols=2, spacing=10, size_hint_y=None, height=100)
-        form_layout.add_widget(Label(text="Banca Inicial (R$):", font_size=18, color=(0.85, 0.9, 0.95, 1)))
-        self.input_banca = TextInput(text="1000.0", multiline=False, font_size=18, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[12,14,12,14])
+        form_layout = GridLayout(cols=2, spacing=10, size_hint_y=None, height=90)
+        form_layout.add_widget(Label(text="Banca Inicial (R$):", font_size=16, color=(0.85, 0.9, 0.95, 1)))
+        self.input_banca = TextInput(text="1000.0", multiline=False, font_size=16, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[10,12,10,12])
         form_layout.add_widget(self.input_banca)
 
-        form_layout.add_widget(Label(text="Risco Máximo (%):", font_size=18, color=(0.85, 0.9, 0.95, 1)))
-        self.input_risco = TextInput(text="2.0", multiline=False, font_size=18, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[12,14,12,14])
+        form_layout.add_widget(Label(text="Risco Máximo (%):", font_size=16, color=(0.85, 0.9, 0.95, 1)))
+        self.input_risco = TextInput(text="2.0", multiline=False, font_size=16, background_color=(0.14, 0.18, 0.24, 1), foreground_color=(1,1,1,1), padding=[10,12,10,12])
         form_layout.add_widget(self.input_risco)
         self.conteudo_dinamico.add_widget(form_layout)
 
         btn_simular = Button(
             text="[b]EXECUTAR 100.000 SIMULAÇÕES[/b]",
             markup=True,
-            font_size=17,
+            font_size=16,
             size_hint_y=None,
-            height=70,
+            height=60,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1),
             color=(1, 1, 1, 1)
@@ -509,9 +509,9 @@ class MainOSScreen(Screen):
         btn_simular.bind(on_press=self.executar_monte_carlo)
         self.conteudo_dinamico.add_widget(btn_simular)
 
-        self.conteudo_dinamico.add_widget(Label(text="[b]Distribuição Estocástica:[/b]", markup=True, font_size=16, size_hint_y=None, height=30, color=(0.85, 0.9, 0.95, 1)))
+        self.conteudo_dinamico.add_widget(Label(text="[b]Distribuição Estocástica:[/b]", markup=True, font_size=15, size_hint_y=None, height=30, color=(0.85, 0.9, 0.95, 1)))
         
-        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=170)
+        self.graph_widget = MonteCarloGraphWidget(size_hint_y=None, height=160)
         self.conteudo_dinamico.add_widget(self.graph_widget)
 
         self.terminal_apostas = TextInput(
@@ -520,10 +520,10 @@ class MainOSScreen(Screen):
             foreground_color=(0.0, 0.95, 0.75, 1),
             readonly=True,
             multiline=True,
-            font_size=16,
+            font_size=15,
             size_hint_y=None,
-            height=180,
-            padding=[14, 14, 14, 14]
+            height=160,
+            padding=[12, 12, 12, 12]
         )
         self.conteudo_dinamico.add_widget(self.terminal_apostas)
 
@@ -531,9 +531,9 @@ class MainOSScreen(Screen):
         self.conteudo_dinamico.add_widget(Label(
             text="[b]Pesquisa Inteligente (Gemini API)[/b]",
             markup=True,
-            font_size=18,
+            font_size=16,
             size_hint_y=None,
-            height=35,
+            height=30,
             color=(0.85, 0.9, 0.95, 1)
         ))
 
@@ -542,20 +542,20 @@ class MainOSScreen(Screen):
             hint_text="Digite sua pergunta...",
             multiline=False,
             size_hint_y=None,
-            height=60,
-            font_size=17,
+            height=50,
+            font_size=16,
             background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(1, 1, 1, 1),
-            padding=[12, 14, 12, 14]
+            padding=[10, 12, 10, 12]
         )
         self.conteudo_dinamico.add_widget(self.input_pergunta)
 
-        acoes_layout = BoxLayout(size_hint_y=None, height=65, spacing=10)
+        acoes_layout = BoxLayout(size_hint_y=None, height=55, spacing=8)
         
         btn_perguntar = Button(
             text="[b]PESQUISAR[/b]",
             markup=True,
-            font_size=16,
+            font_size=15,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1)
         )
@@ -563,11 +563,11 @@ class MainOSScreen(Screen):
         acoes_layout.add_widget(btn_perguntar)
 
         self.btn_microfone = Button(
-            text="[b]🎤 MICROFONE (OFF)[/b]",
+            text="[b]🎤 MIC (OFF)[/b]",
             markup=True,
-            font_size=15,
+            font_size=14,
             size_hint_x=None,
-            width=190,
+            width=150,
             background_normal='',
             background_color=(0.22, 0.28, 0.38, 1)
         )
@@ -582,10 +582,10 @@ class MainOSScreen(Screen):
             foreground_color=(0.95, 0.97, 1.0, 1),
             readonly=True,
             multiline=True,
-            font_size=17,
+            font_size=15,
             size_hint_y=None,
-            height=320,
-            padding=[16, 16, 16, 16]
+            height=280,
+            padding=[12, 12, 12, 12]
         )
         self.conteudo_dinamico.add_widget(self.terminal_geral)
 
@@ -593,9 +593,9 @@ class MainOSScreen(Screen):
         self.conteudo_dinamico.add_widget(Label(
             text="[b]Assistente de Chat Q&A[/b]",
             markup=True,
-            font_size=18,
+            font_size=16,
             size_hint_y=None,
-            height=35,
+            height=30,
             color=(0.85, 0.9, 0.95, 1)
         ))
 
@@ -613,31 +613,31 @@ class MainOSScreen(Screen):
             foreground_color=(0.95, 0.97, 1.0, 1),
             readonly=True,
             multiline=True,
-            font_size=17,
+            font_size=15,
             size_hint_y=None,
-            height=320,
-            padding=[16, 16, 16, 16]
+            height=280,
+            padding=[12, 12, 12, 12]
         )
         self.conteudo_dinamico.add_widget(self.chat_terminal)
 
-        input_layout = BoxLayout(size_hint_y=None, height=65, spacing=10)
+        input_layout = BoxLayout(size_hint_y=None, height=55, spacing=8)
         self.input_chat_pergunta = TextInput(
             text="",
             hint_text="Escreva sua pergunta...",
             multiline=False,
-            font_size=17,
+            font_size=16,
             background_color=(0.14, 0.18, 0.24, 1),
             foreground_color=(1, 1, 1, 1),
-            padding=[12, 14, 12, 14]
+            padding=[10, 12, 10, 12]
         )
         input_layout.add_widget(self.input_chat_pergunta)
 
         btn_enviar_chat = Button(
             text="[b]ENVIAR[/b]",
             markup=True,
-            font_size=16,
+            font_size=15,
             size_hint_x=None,
-            width=130,
+            width=110,
             background_normal='',
             background_color=(0.0, 0.78, 0.56, 1)
         )
@@ -654,7 +654,7 @@ class MainOSScreen(Screen):
             self.terminal_geral.text = "🎤 Escutando... Toque novamente para encerrar e enviar."
         else:
             self.gravando_voz = False
-            self.btn_microfone.text = "[b]🎤 MICROFONE (OFF)[/b]"
+            self.btn_microfone.text = "[b]🎤 MIC (OFF)[/b]"
             self.btn_microfone.background_color = (0.22, 0.28, 0.38, 1)
             
             termo_simulado = "Análise completa de probabilidades de mercado"
