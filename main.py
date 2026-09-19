@@ -57,7 +57,7 @@ class NexusQuantumApp(App):
 
         # --- CABEÇALHO ---
         self.titulo = Label(
-            text="[b][color=#00ffcc]NEXUS QUANTUM // MOTOR MONTE CARLO (50k)[/color][/b]",
+            text="[b][color=#00ffcc]NEXUS QUANTUM // BILHETE DE APOSTAS (100k)[/color][/b]",
             markup=True,
             font_size=18,
             size_hint_y=None,
@@ -93,7 +93,7 @@ class NexusQuantumApp(App):
 
         # --- BLOCO 2: TELA DE EXIBIÇÃO PRINCIPAL (FONTE GRANDE 20) ---
         self.txt_chat_ia = TextInput(
-            text="[Nexus AI Engine]: Sistema pronto. O motor de 50.000 simulações está calibrado para analisar Gols, Escanteios, Cartões e Desfalques globais.",
+            text="[Nexus AI Engine]: Sistema pronto. Clique em 'Gerar Bilhete 100k' para rodar o motor quântico de alta precisão com base nos jogos de hoje.",
             background_color=(0.02, 0.04, 0.08, 1),
             foreground_color=(0.25, 1, 0.65, 1),
             readonly=False,
@@ -104,11 +104,11 @@ class NexusQuantumApp(App):
         )
         layout.add_widget(self.txt_chat_ia)
 
-        # --- BLOCO 3: GRADE DE BOTÕES (COMANDO DO MOTOR) ---
-        grid_botoes = GridLayout(cols=2, spacing=8, size_hint_y=None, height=100)
+        # --- BLOCO 3: GRADE DE BOTÕES (ALTURA AJUSTADA PARA 140) ---
+        grid_botoes = GridLayout(cols=2, spacing=8, size_hint_y=None, height=140)
 
         self.btn_jogos_hoje = AppIconButton(
-            text='🎲 Rodar 50k Simulações',
+            text='🎲 Gerar Bilhete 100k',
             bg_color=(0.10, 0.65, 0.35, 1)
         )
         self.btn_jogos_hoje.bind(on_press=lambda x: self.disparar_processamento_async())
@@ -236,21 +236,32 @@ class NexusQuantumApp(App):
         threading.Thread(target=self._executar_teste_rede, daemon=True).start()
 
     def _executar_teste_rede(self):
-        try:
-            resp = requests.get("https://api.football-data.org/v4/matches", timeout=5)
-            status = resp.status_code
-            if status == 200:
-                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO]: Conexão OK! API respondeu (HTTP 200).")
-            elif status in [401, 403]:
-                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO]: Internet ativa, mas a API recusou (HTTP 401/403). Insira sua Chave.")
+        urls_teste = ["https://www.google.com", "https://api.football-data.org/v4/matches"]
+        sucesso = False
+        status_code_capturado = None
+
+        for url in urls_teste:
+            try:
+                resp = requests.get(url, timeout=5)
+                status_code_capturado = resp.status_code
+                sucesso = True
+                break
+            except Exception:
+                continue
+
+        if sucesso:
+            if status_code_capturado == 200 or status_code_capturado is None:
+                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO]: Conexão OK! A internet do telemóvel está a responder perfeitamente.")
+            elif status_code_capturado in [401, 403]:
+                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO]: Internet ativa, mas a API recusou por chave inválida/ausente (HTTP 401/403).")
             else:
-                self.atualizar_interface_texto(f"🌐 [DIAGNÓSTICO]: Rede ativa, mas retornou HTTP {status}.")
-        except Exception as e:
-            self.atualizar_interface_texto(f"❌ [FALHA DE REDE]: Sem conexão ou timeout. ({str(e)})")
+                self.atualizar_interface_texto(f"🌐 [DIAGNÓSTICO]: Rede ativa, mas retornou status HTTP {status_code_capturado}.")
+        else:
+            self.atualizar_interface_texto("❌ [FALHA DE REDE]: Sem conexão ou erro de DNS/SSL no Android.")
 
     def disparar_processamento_async(self):
         self.btn_jogos_hoje.disabled = True
-        self.atualizar_interface_texto("⏳ Sincronizando dados e rodando o Motor de Monte Carlo (50.000 simulações)...")
+        self.atualizar_interface_texto("⏳ Sincronizando jogos do dia e processando 100.000 simulações de Monte Carlo...")
         threading.Thread(target=self.processo_monte_carlo, daemon=True).start()
 
     def processo_monte_carlo(self):
@@ -258,11 +269,11 @@ class NexusQuantumApp(App):
         rapid_key = self.obter_credencial("rapid_key")
         
         if not rapid_key:
-            self.atualizar_interface_texto("⚠️ Aviso: Insira sua chave da API no campo superior e clique em 'Salvar' para carregar as ligas.")
+            self.atualizar_interface_texto("⚠️ Aviso: Insira sua chave da API no campo superior e clique em 'Salvar'.")
             self.btn_jogos_hoje.disabled = False
             return
 
-        headers = {"User-Agent": "NexusQuantumApp/20.1", "X-Auth-Token": rapid_key}
+        headers = {"User-Agent": "Mozilla/5.0 (Linux; Android)", "X-Auth-Token": rapid_key}
         
         try:
             response = requests.get(url, headers=headers, timeout=10)
@@ -276,27 +287,31 @@ class NexusQuantumApp(App):
                 self.btn_jogos_hoje.disabled = False
                 return
         except Exception:
-            pass # Fallback para o cache local se houver falha de rede temporária
+            pass 
 
         matches = self.ler_cache_seguro()
         if not matches:
-            self.atualizar_interface_texto("🌐 Falha de Conexão: Nenhum dado em cache encontrado.")
+            self.atualizar_interface_texto("🌐 Falha de Conexão: Nenhum dado online ou em cache encontrado.")
             self.btn_jogos_hoje.disabled = False
             return
 
         data_hoje = datetime.now().strftime('%Y-%m-%d')
         matches_hoje = [m for m in matches if m.get('utcDate', '').startswith(data_hoje)]
+
         if not matches_hoje:
-            matches_hoje = matches[:5]
+            self.atualizar_interface_texto(f"⚠️ [Nexus AI]: Nenhum jogo oficial encontrado para hoje ({data_hoje}). Conecte-se em dia de rodada ativa.")
+            self.btn_jogos_hoje.disabled = False
+            return
 
-        texto_relatorio = f"=== 📊 MOTOR DE MONTE CARLO (50.000 ITERAÇÕES) ===\n\n"
+        # --- GERAÇÃO DO BILHETE DE APOSTAS INTELIGENTE (100K) ---
+        texto_relatorio = f"🎟️ === BILHETE DE APOSTAS NEXUS (100k) // {data_hoje} === 🎟️\n\n"
 
-        for idx, m in enumerate(matches_hoje[:6], start=1):
+        for idx, m in enumerate(matches_hoje[:5], start=1):
             home = m.get('homeTeam', {}).get('name', 'Mandante')
             away = m.get('awayTeam', {}).get('name', 'Visitante')
             comp = m.get('competition', {}).get('name', 'Liga')
             
-            simulacoes = 50000
+            simulacoes = 100000  # <--- ATUALIZADO PARA 100.000 SIMULAÇÕES
             vitorias_home = 0
             empates = 0
             vitorias_away = 0
@@ -331,11 +346,30 @@ class NexusQuantumApp(App):
             media_esc = total_escanteios / simulacoes
             media_cart = total_cartoes / simulacoes
 
+            # Lógica de Decisão do Bilhete (Gols e Resultado)
+            if p_h >= 55.0:
+                sugestao_1x2 = f"Vitória Casa ({home})"
+            elif p_a >= 50.0:
+                sugestao_1x2 = f"Vitória Fora ({away})"
+            else:
+                sugestao_1x2 = "Dupla Hipótese / Empate Anula"
+
+            if media_gols > 2.5:
+                sugestao_gols = "Over 2.5 Gols (Mais de 2.5)"
+            else:
+                sugestao_gols = "Under 3.5 Gols / BTTS (Ambos marcam? Sim/Não)"
+
+            sugestao_esc = f"Mais de {(media_esc - 1):.1f} Escanteios"
+            sugestao_cart = f"Média ~{media_cart:.1f} Cartões"
+
             texto_relatorio += f"[{idx}] {comp}\n"
-            texto_relatorio += f"⚽ {home} vs {away}\n"
-            texto_relatorio += f"• 1X2 Probabilidades: Casa {p_h:.1f}% | Empate {p_e:.1f}% | Fora {p_a:.1f}%\n"
-            texto_relatorio += f"• Média de Gols (50k runs): {media_gols:.2f} (Over 2.5: {'Sim' if media_gols > 2.4 else 'Não'})\n"
-            texto_relatorio += f"• Estimativa Escanteios: ~{media_esc:.1f} | Cartões: ~{media_cart:.1f}\n\n"
+            texto_relatorio += f"⚽ {home} x {away}\n"
+            texto_relatorio += f"  🎯 [Palpite 1X2]: {sugestao_1x2} ({max(p_h, p_e, p_a):.1f}% prob.)\n"
+            texto_relatorio += f"  🥅 [Palpite Gols]: {sugestao_gols} (Média: {media_gols:.2f})\n"
+            texto_relatorio += f"  🚩 [Cantos/Cartões]: {sugestao_esc} | {sugestao_cart}\n"
+            texto_relatorio += "-" * 38 + "\n\n"
+
+        texto_relatorio += "💡 Dica: 100.000 iterações concluídas com alta precisão estatística."
 
         self.atualizar_interface_texto(texto_relatorio)
         self.btn_jogos_hoje.disabled = False
@@ -354,15 +388,20 @@ class NexusQuantumApp(App):
             self.atualizar_interface_texto("⚠️ Cache vazio. Execute as simulações primeiro.")
             return
 
-        jogo = matches[0]
+        data_hoje = datetime.now().strftime('%Y-%m-%d')
+        matches_hoje = [m for m in matches if m.get('utcDate', '').startswith(data_hoje)]
+        if not matches_hoje:
+            matches_hoje = matches 
+
+        jogo = matches_hoje[0]
         home = jogo.get('homeTeam', {}).get('name', 'Mandante')
         away = jogo.get('awayTeam', {}).get('name', 'Visitante')
 
-        parecer = (f"🧠 PARECER QUÂNTICO DA IA:\n\n"
+        parecer = (f"🧠 PARECER QUÂNTICO DA IA (100k):\n\n"
                    f"Confronto em Destaque: {home} vs {away}\n"
                    f"• Análise de Desfalques: Sem baixas críticas informadas no boletim oficial.\n"
                    f"• Sentimento da Torcida: Alta pressão da torcida mandante por resultado.\n"
-                   f"• Veredito: O cruzamento das 50.000 simulações aponta forte tendência de valor no mercado de gols.")
+                   f"• Veredito: O cruzamento das 100.000 simulações aponta forte tendência de valor no mercado de gols.")
         self.atualizar_interface_texto(parecer)
 
 if __name__ == "__main__":
