@@ -179,12 +179,16 @@ class DashboardScreen(Screen):
         form_layout.add_widget(self.input_risco)
         layout.add_widget(form_layout)
 
-        # Botão de Execução Assíncrona
+        # Botão de Execução Otimizado (Altura ajustada e destaque visual proeminente)
         btn_simular = Button(
-            text=" EXECUTAR SIMULAÇÃO DE MONTE CARLO ",
+            text="[b]EXECUTAR SIMULAÇÃO DE MONTE CARLO[/b]",
+            markup=True,
+            font_size=15,
             size_hint_y=None,
-            height=45,
-            background_color=(0.0, 0.6, 0.4, 1)
+            height=60,
+            background_normal='',
+            background_color=(0.0, 0.6, 0.4, 1),
+            color=(1, 1, 1, 1)
         )
         btn_simular.bind(on_press=self.executar_processamento)
         layout.add_widget(btn_simular)
@@ -225,7 +229,8 @@ class DashboardScreen(Screen):
 
             partidas = chamada_api_com_retry(fetch_partidas_mock)
             
-            Clock.schedule_once(lambda dt: self.terminal.insert_text(f"[API] {len(partidas)} partidas validadas via Dataclass com sucesso.\n"), 0)
+            log_msg_1 = f"Iniciando pipeline...\n[API] {len(partidas)} partidas validadas via Dataclass com sucesso.\n"
+            Clock.schedule_once(lambda dt: setattr(self.terminal, 'text', log_msg_1), 0)
 
             # Motor de Monte Carlo (10.000 iterações estocásticas por partida)
             todos_resultados = []
@@ -251,13 +256,19 @@ class DashboardScreen(Screen):
 
             # Atualização segura da interface gráfica via Clock Scheduler
             Clock.schedule_once(lambda dt: self.graph_widget.atualizar_dados(todos_resultados), 0)
-            Clock.schedule_once(lambda dt: self.terminal.insert_text("\n[SUCESSO] Simulação concluída! Gráfico renderizado e dados persistidos no SQLite.\n"), 0)
             
             historico = self.db.obter_historico()
-            Clock.schedule_once(lambda dt: self.terminal.insert_text(f"Total de bilhetes armazenados no banco relacional: {len(historico)}\n"), 0)
+            log_final = (
+                f"Iniciando pipeline...\n"
+                f"[API] {len(partidas)} partidas validadas via Dataclass com sucesso.\n"
+                f"[SUCESSO] Simulação concluída! Gráfico renderizado.\n"
+                f"Total no banco relacional: {len(historico)} registros.\n"
+            )
+            Clock.schedule_once(lambda dt: setattr(self.terminal, 'text', log_final), 0)
 
         except Exception as e:
-            Clock.schedule_once(lambda dt: self.terminal.insert_text(f"[ERRO CRÍTICO] {e}\n"), 0)
+            err_msg = f"[ERRO CRÍTICO] {str(e)}\n"
+            Clock.schedule_once(lambda dt: setattr(self.terminal, 'text', err_msg), 0)
 
 
 class NexusApp(App):
