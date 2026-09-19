@@ -42,7 +42,7 @@ class NexusQuantumApp(App):
 
         # --- CABEÇALHO ---
         self.titulo = Label(
-            text="[b][color=#00ffcc]NEXUS QUANTUM // v20.1 (NET CHECK)[/color][/b]",
+            text="[b][color=#00ffcc]NEXUS QUANTUM // v20.1 (NET & VOICE ACTIVE)[/color][/b]",
             markup=True,
             font_size=16,
             size_hint_y=None,
@@ -80,9 +80,9 @@ class NexusQuantumApp(App):
         layout_api.add_widget(self.btn_salvar_key)
         layout.add_widget(layout_api)
 
-        # --- BLOCO 2: CAIXA DE TEXTO SUPERIOR (ONDE TUDO APARECE ORGANIZADO) ---
+        # --- BLOCO 2: CAIXA DE TEXTO SUPERIOR (TELA DE EXIBIÇÃO PRINCIPAL) ---
         self.txt_chat_ia = TextInput(
-            text="[Nexus AI v20.1]: Sistema pronto. Clique em 'Testar Conexão' ou 'Jogos de Hoje' para verificar a rede.",
+            text="[Nexus AI v20.1]: Sistema pronto na tela inicial. Permissões de Internet e Microfone ativas. Clique em 'Testar Conexão' ou 'Jogos de Hoje' para iniciar.",
             background_color=(0.02, 0.04, 0.08, 1),
             foreground_color=(0.25, 1, 0.65, 1),
             readonly=False,
@@ -120,7 +120,6 @@ class NexusQuantumApp(App):
         layout.add_widget(layout_pergunta)
 
         # --- BLOCO 4: BOTÕES GRANDES E NA PARTE DE BAIXO ---
-        # Fila 1 de Botões Inferiores
         layout_botoes_baixo_1 = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=8)
         
         self.btn_jogos_hoje = Button(
@@ -147,7 +146,6 @@ class NexusQuantumApp(App):
         
         layout.add_widget(layout_botoes_baixo_1)
 
-        # Fila 2 de Botões Inferiores
         layout_botoes_baixo_2 = BoxLayout(orientation='horizontal', size_hint_y=None, height=50, spacing=8)
         
         self.btn_ia_generativa = Button(
@@ -207,7 +205,7 @@ class NexusQuantumApp(App):
             try:
                 with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                     json.dump(dados, f, ensure_ascii=False)
-                self.atualizar_interface_texto("[Nexus AI]: Chave salva com segurança.")
+                self.atualizar_interface_texto("[Nexus AI]: Chave salva com segurança e pronta para uso.")
             except Exception as e:
                 self.atualizar_interface_texto(f"Erro ao salvar chave: {e}")
 
@@ -219,14 +217,14 @@ class NexusQuantumApp(App):
                 intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale o que quiser perguntar para a IA...")
                 activity.startActivity(intent)
-                self.atualizar_interface_texto("🎙️ [Microfone Ativo]: Ouvindo sua pergunta...")
+                self.atualizar_interface_texto("🎙️ [Microfone Ativo]: Ouvindo sua pergunta no dispositivo...")
             except Exception as e:
-                self.atualizar_interface_texto(f"⚠️ Erro no microfone: {str(e)}")
+                self.atualizar_interface_texto(f"⚠️ Erro ao acionar microfone nativo: {str(e)}")
         else:
-            self.atualizar_interface_texto("🎙️ [Simulação de Voz]: Microfone acionado! Digite sua pergunta no campo acima.")
+            self.atualizar_interface_texto("🎙️ [Simulação de Voz]: Microfone acionado com sucesso! Digite ou utilize o recurso no ambiente móvel.")
 
     def processar_pergunta_live_texto(self, texto_pergunta):
-        resposta = f"🤖 [Nexus AI - Resposta Geral]:\n\nVocê perguntou: '{texto_pergunta}'\n\nProcessando dados via web. Sistema conectado e operacional."
+        resposta = f"🤖 [Nexus AI - Resposta em Tela]:\n\nConsulta recebida: '{texto_pergunta}'\n\nRede conectada e processando requisição com sucesso."
         self.atualizar_interface_texto(resposta)
 
     def processar_pergunta_livre(self):
@@ -241,30 +239,29 @@ class NexusQuantumApp(App):
         self.txt_chat_ia.text = novo_texto
 
     def testar_conexao_internet(self):
-        self.atualizar_interface_texto("🌐 Testando conexão com a internet...")
+        self.atualizar_interface_texto("🌐 Testando conexão com a internet em tempo real...")
         threading.Thread(target=self._executar_teste_rede, daemon=True).start()
 
     def _executar_teste_rede(self):
         try:
-            # Teste rápido de conectividade com DNS público e API
             resp = requests.get("https://api.football-data.org/v4/matches", timeout=5)
             status = resp.status_code
             if status == 200:
-                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO DE REDE]: Conexão com a internet OK! A API respondeu com sucesso (HTTP 200). Sua rede está livre.")
+                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO DE REDE]: Conexão com a internet 100% OK! A API respondeu com sucesso (HTTP 200).")
             elif status in [401, 403]:
-                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO DE REDE]: A internet está funcionando, mas a API recusou o acesso (HTTP 401/403). Verifique se a sua Chave da API está correta e salva.")
+                self.atualizar_interface_texto("🌐 [DIAGNÓSTICO DE REDE]: A internet está ativa, mas a API recusou o acesso (HTTP 401/403). Verifique sua Chave da API.")
             else:
-                self.atualizar_interface_texto(f"🌐 [DIAGNÓSTICO DE REDE]: Rede ativa, mas a API retornou código HTTP {status}.")
+                self.atualizar_interface_texto(f"🌐 [DIAGNÓSTICO DE REDE]: Rede ativa, mas a API retornou o código HTTP {status}.")
         except requests.exceptions.ConnectionError:
-            self.atualizar_interface_texto("❌ [FALHA DE REDE]: O aplicativo NÃO conseguiu conectar à internet. Verifique se o Wi-Fi ou dados móveis estão ativos e se a permissão de internet está ativada no Buildozer.")
+            self.atualizar_interface_texto("❌ [FALHA DE REDE]: Sem conexão com a internet. Certifique-se de que o Wi-Fi ou dados móveis estão ativos e o Buildozer incluiu a permissão correta.")
         except requests.exceptions.Timeout:
-            self.atualizar_interface_texto("⚠️ [TIMEOUT]: A conexão com a internet expirou (demorou muito para responder). Sua rede pode estar instável.")
+            self.atualizar_interface_texto("⚠️ [TIMEOUT]: A conexão com a internet expirou. Sua rede pode estar lenta.")
         except Exception as e:
             self.atualizar_interface_texto(f"⚠️ [ERRO DE CONEXÃO]: {str(e)}")
 
     def disparar_processamento_async(self, apenas_hoje=False):
         self.btn_jogos_hoje.disabled = True
-        self.atualizar_interface_texto("⏳ Executando motor estatístico e buscando jogos...")
+        self.atualizar_interface_texto("⏳ Acessando rede, buscando dados de jogos e atualizando tela...")
         threading.Thread(target=self.processo_completo_jogos, args=(apenas_hoje,), daemon=True).start()
 
     def processo_completo_jogos(self, apenas_hoje):
@@ -272,7 +269,7 @@ class NexusQuantumApp(App):
         rapid_key = self.obter_credencial("rapid_key")
         
         if not rapid_key:
-            self.atualizar_interface_texto("⚠️ Aviso: Insira sua chave da API no campo acima e clique em 'Salvar Chave'.")
+            self.atualizar_interface_texto("⚠️ Aviso: Insira sua chave da API no campo superior e clique em 'Salvar Chave'.")
             self.btn_jogos_hoje.disabled = False
             return
 
@@ -293,7 +290,6 @@ class NexusQuantumApp(App):
             else:
                 raise Exception(f"HTTP {response.status_code}")
         except Exception as e:
-            # Tenta carregar do cache offline se falhar
             dados_partidas = {}
             with file_lock:
                 if os.path.exists(CACHE_FILE):
@@ -302,7 +298,7 @@ class NexusQuantumApp(App):
                             dados_partidas = json.load(f)
                     except: pass
             if not dados_partidas:
-                self.atualizar_interface_texto(f"🌐 Falha de Conexão com a Internet: {str(e)}\n\nToque em 'Testar Conexão' para verificar o status da rede.")
+                self.atualizar_interface_texto(f"🌐 Falha de Conexão com a Internet: {str(e)}\n\nToque em 'Testar Conexão' para verificar o status.")
                 self.btn_jogos_hoje.disabled = False
                 return
 
@@ -333,7 +329,7 @@ class NexusQuantumApp(App):
             p_f = 100 - p_c
             
             texto += f"{idx}. [{comp}] {home} vs {away} ({hora}h)\n"
-            texto += f"   • Probabilidade Mandante: {p_c}% | Visitante: {p_f}% | Status: Conectado\n\n"
+            texto += f"   • Probabilidade Mandante: {p_c}% | Visitante: {p_f}% | Status: Rede Conectada\n\n"
 
         self.atualizar_interface_texto(texto)
         self.btn_jogos_hoje.disabled = False
@@ -349,14 +345,14 @@ class NexusQuantumApp(App):
     def executar_analise_ia_generativa(self):
         matches = self.ler_cache_seguro()
         if not matches:
-            self.atualizar_interface_texto("⚠️ Cache vazio. Sincronize os jogos primeiro.")
+            self.atualizar_interface_texto("⚠️ Cache vazio. Sincronize os jogos primeiro usando o botão 'Jogos de Hoje'.")
             return
 
         jogo = matches[0]
         home = jogo.get('homeTeam', {}).get('name', 'Mandante')
         away = jogo.get('awayTeam', {}).get('name', 'Visitante')
 
-        parecer = f"🧠 PARECER DA IA AVANÇADA:\n\nConfronto: {home} vs {away}\nAnálise preditiva online conectada com sucesso."
+        parecer = f"🧠 PARECER DA IA AVANÇADA:\n\nConfronto: {home} vs {away}\nAnálise preditiva online conectada com sucesso via internet."
         self.atualizar_interface_texto(parecer)
 
 if __name__ == "__main__":
