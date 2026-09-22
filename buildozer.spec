@@ -1,7 +1,7 @@
 [app]
 
 # (str) Title of your application
-title = Nexus Quantum
+title = Nexus
 
 # (str) Package name
 package.name = nexusquantum
@@ -13,13 +13,13 @@ package.domain = org.nexus
 source.include_exts = py,png,jpg,kv,atlas,json,enc
 
 # (list) Application requirements
-requirements = python3,kivy,plyer,requests,urllib3,idna,certifi
+requirements = python3,kivy,plyer,requests,urllib3,idna,certifi,pyttsx3
 
 # (str) Supported orientations
 orientation = portrait
 
 # (list) Permissions
-android.permissions = INTERNET,ACCESS_NETWORK_STATE,RECORD_AUDIO
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # (int) Target Android API
 android.api = 33
