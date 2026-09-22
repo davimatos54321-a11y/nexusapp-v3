@@ -1,4 +1,4 @@
-# main.py - Interface Gráfica com Letras Gigantes (Kivy)
+# main.py - Interface com Borda/Margem Lateral e Letras Gigantes (Kivy)
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
@@ -19,44 +19,47 @@ except Exception:
 
 class SuperCerebroApp(App):
     def build(self):
-        root = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        # Painel Principal com BORDA/MARGEM EXTERNA de 25 pixels em toda a volta
+        root = BoxLayout(orientation='vertical', padding=25, spacing=15)
         
-        # Cabeçalho / Título Gigante
+        # Cabeçalho / Título com letras grandes
         header = Label(
             text="[b]NEXUS[/b]",
             markup=True,
             size_hint_y=None,
             height=90,
-            font_size=60,
+            font_size=55,
             color=(0.1, 0.9, 1.0, 1)
         )
         root.add_widget(header)
 
-        # Área de Rolagem
+        # Área de Rolagem do Chat (protegida pela margem)
         self.scroll = ScrollView(size_hint=(1, 1), do_scroll_x=False)
-        self.chat_layout = BoxLayout(orientation='vertical', size_hint_y=None, spacing=20)
+        self.chat_layout = BoxLayout(orientation='vertical', size_hint_y=None, spacing=25)
         self.chat_layout.bind(minimum_height=self.chat_layout.setter('height'))
         self.scroll.add_widget(self.chat_layout)
         root.add_widget(self.scroll)
 
-        # Painel inferior
-        input_layout = BoxLayout(size_hint_y=None, height=100, spacing=10)
+        # Painel inferior (Microfone + Caixa de Texto + Enviar)
+        input_layout = BoxLayout(size_hint_y=None, height=110, spacing=15)
         
+        # Botão do Microfone com letra grande
         btn_mic = Button(
             text="🎙️ Falar",
             size_hint_x=None,
-            width=130,
+            width=140,
             background_color=(0.9, 0.4, 0.1, 1),
             color=(1, 1, 1, 1),
-            font_size=32
+            font_size=30
         )
         btn_mic.bind(on_press=self.ouvir_microfone)
         input_layout.add_widget(btn_mic)
 
+        # Caixa de texto central com fonte bem grande
         self.text_input = TextInput(
             hint_text="Comando...",
             multiline=False,
-            font_size=45,
+            font_size=38,
             background_color=(0.15, 0.15, 0.2, 1),
             foreground_color=(1, 1, 1, 1),
             cursor_color=(1, 1, 1, 1)
@@ -64,20 +67,21 @@ class SuperCerebroApp(App):
         self.text_input.bind(on_text_validate=self.enviar_mensagem)
         input_layout.add_widget(self.text_input)
 
+        # Botão de Enviar com letra grande
         btn_enviar = Button(
             text="Enviar",
             size_hint_x=None,
             width=140,
             background_color=(0.1, 0.6, 0.9, 1),
             color=(1, 1, 1, 1),
-            font_size=32
+            font_size=30
         )
         btn_enviar.bind(on_press=self.enviar_mensagem)
         input_layout.add_widget(btn_enviar)
 
         root.add_widget(input_layout)
 
-        msg_inicial = "Nexus online com letras gigantes!"
+        msg_inicial = "Nexus online com bordas protegidas e letras gigantes!"
         Clock.schedule_once(lambda dt: self.adicionar_message_robo(msg_inicial), 0.6)
         self.falar_texto(msg_inicial)
 
@@ -129,41 +133,41 @@ class SuperCerebroApp(App):
 class MessageLabelUsuario(Label):
     markup = True
     size_hint_y = None
-    font_size = 70  # <--- GIGANTE
+    font_size = 50  # <--- Letras grandes mantidas
     color = (0.9, 0.9, 0.9, 1)
     halign = 'left'
     valign = 'middle'
-    padding = (20, 20)
+    padding = (15, 15)
     def on_size(self, *args):
-        self.text_size = (self.width - 40, None)
+        self.text_size = (self.width - 30, None)
         self.texture_update()
-        self.height = self.texture_size[1] + 40
+        self.height = self.texture_size[1] + 60
 
 class MessageLabelRobo(Label):
     markup = True
     size_hint_y = None
-    font_size = 75  # <--- MÁXIMO DESTAQUE PARA OS VALORES
+    font_size = 52  # <--- Letras gigantes para os valores do robô
     color = (0.2, 1, 0.6, 1)
     halign = 'left'
     valign = 'middle'
-    padding = (20, 20)
+    padding = (15, 15)
     def on_size(self, *args):
-        self.text_size = (self.width - 40, None)
+        self.text_size = (self.width - 30, None)
         self.texture_update()
-        self.height = self.texture_size[1] + 40
+        self.height = self.texture_size[1] + 60
 
 class MessageLabelSistema(Label):
     markup = True
     size_hint_y = None
-    font_size = 65  # <--- GIGANTE
+    font_size = 44
     color = (1, 0.6, 0, 1)
     halign = 'center'
     valign = 'middle'
-    padding = (20, 20)
+    padding = (15, 15)
     def on_size(self, *args):
-        self.text_size = (self.width - 40, None)
+        self.text_size = (self.width - 30, None)
         self.texture_update()
-        self.height = self.texture_size[1] + 40
+        self.height = self.texture_size[1] + 60
 
 if __name__ == '__main__':
     Window.clearcolor = (0.05, 0.05, 0.1, 1)
