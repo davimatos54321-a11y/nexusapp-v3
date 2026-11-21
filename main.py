@@ -20,14 +20,22 @@ except Exception:
     TEM_CRYPTOGRAPHY = False
 
 try:
+    from jnius import autoclass
+    TEM_PYJNIUS = True
+except Exception:
+    TEM_PYJNIUS = False
+
+try:
     from kivy.app import App
     from kivy.clock import Clock
     from kivy.core.window import Window
     from kivy.uix.boxlayout import BoxLayout
     from kivy.uix.button import Button
+    from kivy.uix.camera import Camera
     from kivy.uix.label import Label
     from kivy.uix.scrollview import ScrollView
     from kivy.uix.textinput import TextInput
+    from kivy.utils import platform
     TEM_KIVY = True
 except Exception:
     TEM_KIVY = False
@@ -38,8 +46,6 @@ MEU_NOME = "Adailton"
 MEU_NUMERO = "+5519999999999"
 DDI_PADRAO = "55"
 DDD_PADRAO = "19"
-
-# URL do seu servidor de sinalização WebRTC/mensagens (ex: https://seu-servidor.com)
 URL_SINALIZACAO_PADRAO = ""
 
 SERVIDORES_ICE = [
@@ -87,8 +93,6 @@ def normalizar_e164(numero: str, ddi_padrao: str = DDI_PADRAO, ddd_padrao: str =
 
 # ==================== AGENTE GUARDIÃO DE RESILIÊNCIA ====================
 class AgenteResilienciaJanus:
-    """Agente leve de regras para prevenir falhas de estado, rede e entrada."""
-
     def __init__(self):
         self.falhas_sinalizacao = 0
         self.ultimo_erro_rede = ""
@@ -117,15 +121,8 @@ class AgenteResilienciaJanus:
         self.falhas_sinalizacao = 0
         self.ultimo_erro_rede = ""
 
-    def recomendar_rota(self, url_sinalizacao: str, midia: str):
-        if not url_sinalizacao:
-            return "FALLBACK_LOCAL", "Sem servidor de sinalização; usando modo local ou LIGAR (TEL)."
-        if midia == "VIDEO" and self.falhas_sinalizacao >= 2:
-            return "VOZ_PREFERENCIAL", "Múltiplas falhas de rede; priorize VOZ ou LIGAR (TEL)."
-        return "WEBRTC_HTTP", "Rota de sinalização disponível."
 
-
-# ==================== CRIPTOGRAFIA E2EE (X25519 + HKDF + AES-256-GCM + FALLBACK) ====================
+# ==================== CRIPTOGRAFIA E2EE ====================
 class CofreSeguranca:
     def __init__(self, caminho_chave_priv: str):
         self.caminho_chave = caminho_chave_priv
@@ -198,38 +195,8 @@ class CofreSeguranca:
             dklen=32,
         )
 
-    def cifrar_pacote(self, chave_aes: bytes, texto_plano: str, aad: str = "") -> str:
-        if self.modo == "X25519-AESGCM":
-            nonce = os.urandom(12)
-            ct = AESGCM(chave_aes).encrypt(
-                nonce,
-                texto_plano.encode("utf-8"),
-                aad.encode("utf-8") if aad else None,
-            )
-            return base64.b64encode(nonce + ct).decode("ascii")
 
-        nonce = os.urandom(12)
-        pt = texto_plano.encode("utf-8")
-        stream = bytearray()
-        contador = 0
-        while len(stream) < len(pt):
-            bloco = hmac.new(
-                chave_aes,
-                nonce + contador.to_bytes(4, "big") + aad.encode("utf-8"),
-                hashlib.sha256,
-            ).digest()
-            stream.extend(bloco)
-            contador += 1
-        cifrado = bytes(a ^ b for a, b in zip(pt, stream[: len(pt)]))
-        tag = hmac.new(
-            chave_aes,
-            nonce + cifrado + aad.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()[:16]
-        return base64.b64encode(nonce + cifrado + tag).decode("ascii")
-
-
-# ==================== BANCO DE DADOS (CONTATOS E CHAMADAS) ====================
+# ==================== BANCO DE DADOS (SQLITE) ====================
 class BancoChamadas:
     def __init__(self, caminho_db: str):
         self.caminho_db = caminho_db
@@ -325,7 +292,7 @@ class BancoChamadas:
         return [dict(r) for r in rows]
 
 
-# ==================== MOTOR DE CHAMADAS INTELIGENTE ====================
+# ==================== MOTOR DE CHAMADAS ====================
 class CentralChamadas:
     def __init__(self, meu_numero: str, on_log=None):
         self.meu_numero = normalizar_e164(meu_numero)
@@ -344,14 +311,6 @@ class CentralChamadas:
     def log(self, msg: str):
         self.on_log(msg)
 
-    def autodiagnostico(self):
-        total_contatos = len(self.db.listar_contatos())
-        total_hist = len(self.db.listar_historico(limite=100))
-        self.log(
-            f"[AGENTE] OK | Pasta: {PASTA_DADOS} | Crypto: {self.cofre.modo} "
-            f"| Contatos: {total_contatos} | Histórico: {total_hist}"
-        )
-
     def configurar_servidor(self, url: str):
         limpa = (url or "").strip().rstrip("/")
         with self.lock:
@@ -359,67 +318,57 @@ class CentralChamadas:
         self.agente.registrar_sucesso_rede()
         self.log(f"[SERVIDOR] Sinalização configurada: {limpa or 'nenhuma'}")
 
-    def ligar_webrtc(self, numero_raw: str, midia: str = "VOZ"):
+    def iniciar_sessao_midia(self, numero_raw: str, midia: str = "VOZ"):
         ok_dest, num, msg_dest = self.agente.validar_destino(numero_raw)
         if not ok_dest:
             self.log(f"[AGENTE] {msg_dest}")
-            return
+            return False, ""
 
         midia = (midia or "VOZ").upper()
         with self.lock:
             pode, motivo = self.agente.pode_iniciar_chamada(self.estado, self.destino_atual)
             if not pode:
                 self.log(f"[AGENTE] {motivo}")
-                return
+                return False, num
             self.estado = "CHAMANDO"
             self.midia = midia
             self.destino_atual = num
             self.inicio_chamada_em = None
             url = self.url_sinalizacao
 
-        rota, dica = self.agente.recomendar_rota(url, midia)
-        self.db.registrar_chamada(num, "WEBRTC", midia, "CHAMANDO")
-        self.log(f"[CHAMADA {midia}] Destino {num} | Rota: {rota} ({dica})")
+        self.db.registrar_chamada(num, "APP", midia, "INICIADA")
+        self.log(f"[{midia}] Sessão iniciada para {num} ({self.cofre.modo}).")
 
-        if not url:
-            self.log(
-                "[AGENTE DICA] Sem URL de sinalização. Use LIGAR (TEL) para rede telefônica "
-                "ou informe a URL do servidor para sinalização remota."
-            )
-            return
-
-        def _enviar_convite():
-            try:
-                payload = {
-                    "de": self.meu_numero,
-                    "para": num,
-                    "midia": midia,
-                    "cipher_mode": self.cofre.modo,
-                    "pubkey": self.cofre.chave_publica_b64(),
-                    "ice_servers": SERVIDORES_ICE,
-                }
-                req = urllib.request.Request(
-                    f"{url}/call/invite",
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-Janus-Caller": self.meu_numero,
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=6) as resp:
-                    self.agente.registrar_sucesso_rede()
-                    self.log(
-                        f"[SINALIZAÇÃO] Convite {midia} enviado para {num} (HTTP {resp.status})."
+        if url:
+            def _enviar_convite():
+                try:
+                    payload = {
+                        "de": self.meu_numero,
+                        "para": num,
+                        "midia": midia,
+                        "cipher_mode": self.cofre.modo,
+                        "pubkey": self.cofre.chave_publica_b64(),
+                        "ice_servers": SERVIDORES_ICE,
+                    }
+                    req = urllib.request.Request(
+                        f"{url}/call/invite",
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-Janus-Caller": self.meu_numero,
+                        },
+                        method="POST",
                     )
-            except Exception as e:
-                self.agente.registrar_falha_rede(str(e))
-                self.log(
-                    f"[AGENTE ALERTA] Falha de sinalização ({e}). "
-                    "Você pode atender/simular sessão ou usar LIGAR (TEL)."
-                )
+                    with urllib.request.urlopen(req, timeout=6) as resp:
+                        self.agente.registrar_sucesso_rede()
+                        self.log(f"[SINALIZAÇÃO] Convite {midia} enviado (HTTP {resp.status}).")
+                except Exception as e:
+                    self.agente.registrar_falha_rede(str(e))
+                    self.log(f"[AVISO REDE] Sem conexão com servidor ({e}).")
 
-        threading.Thread(target=_enviar_convite, daemon=True).start()
+            threading.Thread(target=_enviar_convite, daemon=True).start()
+
+        return True, num
 
     def atender_chamada(self):
         with self.lock:
@@ -430,7 +379,7 @@ class CentralChamadas:
             self.estado = "EM_CHAMADA"
             self.inicio_chamada_em = int(time.time())
             midia = self.midia
-        self.db.registrar_chamada(num, "WEBRTC", midia, "ATENDIDA")
+        self.db.registrar_chamada(num, "APP", midia, "ATENDIDA")
         self.log(f"[EM CHAMADA {midia}] Conectado com {num}.")
 
     def desligar_chamada(self):
@@ -448,17 +397,32 @@ class CentralChamadas:
             duracao_txt = f" ({seg // 60:02d}:{seg % 60:02d})"
 
         if num:
-            self.db.registrar_chamada(num, "WEBRTC", midia, f"ENCERRADA{duracao_txt}")
-        self.log(f"[CHAMADA ENCERRADA]{duracao_txt} Linha liberada.")
+            self.db.registrar_chamada(num, "APP", midia, f"ENCERRADA{duracao_txt}")
+        self.log(f"[ENCERRADA]{duracao_txt} Linha liberada.")
 
-    def ligar_telefone_padrao(self, numero_raw: str) -> bool:
+    def abrir_discador_nativo(self, numero_raw: str) -> bool:
         ok_dest, num, msg_dest = self.agente.validar_destino(numero_raw)
         if not ok_dest:
             self.log(f"[AGENTE] {msg_dest}")
             return False
 
         self.db.registrar_chamada(num, "TELEFONE_NATIVO", "VOZ", "DISCADO")
-        self.log(f"[TELEFONE] Abrindo discador padrão para {num}...")
+        self.log(f"[TELEFONE] Abrindo discador para {num}...")
+
+        if TEM_KIVY and platform == "android" and TEM_PYJNIUS:
+            try:
+                Intent = autoclass("android.content.Intent")
+                Uri = autoclass("android.net.Uri")
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                intent = Intent(Intent.ACTION_DIAL)
+                intent.setData(Uri.parse(f"tel:{num}"))
+                activity = PythonActivity.mActivity
+                activity.startActivity(intent)
+                self.log("[TELEFONE] Discador nativo aberto com sucesso.")
+                return True
+            except Exception as e:
+                self.log(f"[ERRO DISCADOR] Falha via pyjnius: {e}")
+                return False
 
         try:
             subprocess.run(
@@ -467,7 +431,7 @@ class CentralChamadas:
             )
             return True
         except Exception as e:
-            self.log(f"[AGENTE AVISO] Discador nativo indisponível neste ambiente ({e}).")
+            self.log(f"[AVISO] Discador nativo indisponível neste ambiente ({e}).")
             return False
 
 
@@ -477,14 +441,15 @@ if TEM_KIVY:
         def build(self):
             Window.clearcolor = (0.05, 0.07, 0.11, 1)
             self.central = CentralChamadas(MEU_NUMERO, on_log=self._log_ui)
+            self.camera_widget = None
 
-            raiz = BoxLayout(orientation="vertical", padding=12, spacing=10)
+            raiz = BoxLayout(orientation="vertical", padding=12, spacing=8)
 
             raiz.add_widget(
                 Label(
                     text=f"JANUS CALL  |  {MEU_NOME} ({MEU_NUMERO})",
                     size_hint_y=None,
-                    height=44,
+                    height=40,
                     bold=True,
                     color=(0.35, 0.8, 1, 1),
                 )
@@ -494,8 +459,11 @@ if TEM_KIVY:
                 hint_text="Número (ex: 19988887777 ou +5519988887777)",
                 multiline=False,
                 size_hint_y=None,
-                height=52,
-                font_size=19,
+                height=50,
+                font_size=18,
+                background_color=(0.11, 0.16, 0.24, 1),
+                foreground_color=(0.92, 0.97, 1.0, 1),
+                cursor_color=(0.35, 0.8, 1.0, 1),
             )
             raiz.add_widget(self.txt_numero)
 
@@ -504,21 +472,27 @@ if TEM_KIVY:
                 multiline=False,
                 size_hint_y=None,
                 height=44,
+                background_color=(0.11, 0.16, 0.24, 1),
+                foreground_color=(0.92, 0.97, 1.0, 1),
+                cursor_color=(0.35, 0.8, 1.0, 1),
             )
             raiz.add_widget(self.txt_nome)
 
             self.txt_servidor = TextInput(
-                hint_text="URL servidor sinalização (ex: https://api.seudominio.com)",
+                hint_text="URL servidor sinalização (opcional)",
                 multiline=False,
                 size_hint_y=None,
                 height=44,
+                background_color=(0.11, 0.16, 0.24, 1),
+                foreground_color=(0.92, 0.97, 1.0, 1),
+                cursor_color=(0.35, 0.8, 1.0, 1),
             )
             raiz.add_widget(self.txt_servidor)
 
             btn_srv = Button(
                 text="SALVAR SERVIDOR",
                 size_hint_y=None,
-                height=44,
+                height=42,
                 background_color=(0.14, 0.44, 0.85, 1),
                 bold=True,
             )
@@ -527,26 +501,26 @@ if TEM_KIVY:
             )
             raiz.add_widget(btn_srv)
 
-            l1 = BoxLayout(size_hint_y=None, height=56, spacing=8)
+            l1 = BoxLayout(size_hint_y=None, height=54, spacing=8)
             b_voz = Button(
                 text="CHAMAR VOZ", background_color=(0.12, 0.65, 0.35, 1), bold=True
             )
             b_voz.bind(
-                on_press=lambda _: self.central.ligar_webrtc(self.txt_numero.text, "VOZ")
+                on_press=lambda _: self.central.iniciar_sessao_midia(
+                    self.txt_numero.text, "VOZ"
+                )
             )
 
             b_vid = Button(
                 text="VIDEOCHAMADA", background_color=(0.15, 0.45, 0.85, 1), bold=True
             )
-            b_vid.bind(
-                on_press=lambda _: self.central.ligar_webrtc(self.txt_numero.text, "VIDEO")
-            )
+            b_vid.bind(on_press=self._iniciar_videochamada)
 
             l1.add_widget(b_voz)
             l1.add_widget(b_vid)
             raiz.add_widget(l1)
 
-            l2 = BoxLayout(size_hint_y=None, height=54, spacing=8)
+            l2 = BoxLayout(size_hint_y=None, height=52, spacing=8)
             b_at = Button(
                 text="ATENDER", background_color=(0.18, 0.72, 0.48, 1), bold=True
             )
@@ -555,13 +529,13 @@ if TEM_KIVY:
             b_de = Button(
                 text="DESLIGAR", background_color=(0.82, 0.22, 0.22, 1), bold=True
             )
-            b_de.bind(on_press=lambda _: self.central.desligar_chamada())
+            b_de.bind(on_press=self._encerrar_tudo)
 
             b_tel = Button(
                 text="LIGAR (TEL)", background_color=(0.20, 0.52, 0.90, 1), bold=True
             )
             b_tel.bind(
-                on_press=lambda _: self.central.ligar_telefone_padrao(self.txt_numero.text)
+                on_press=lambda _: self.central.abrir_discador_nativo(self.txt_numero.text)
             )
 
             l2.add_widget(b_at)
@@ -569,7 +543,7 @@ if TEM_KIVY:
             l2.add_widget(b_tel)
             raiz.add_widget(l2)
 
-            l3 = BoxLayout(size_hint_y=None, height=46, spacing=8)
+            l3 = BoxLayout(size_hint_y=None, height=44, spacing=8)
             b_sal = Button(
                 text="SALVAR CONTATO", background_color=(0.16, 0.40, 0.75, 1), bold=True
             )
@@ -590,8 +564,14 @@ if TEM_KIVY:
             l3.add_widget(b_hist)
             raiz.add_widget(l3)
 
+            # Área reservada para a câmera real quandoVIDEOCHAMADA estiver ativa
+            self.camera_container = BoxLayout(
+                orientation="vertical", size_hint_y=None, height=0
+            )
+            raiz.add_widget(self.camera_container)
+
             self.lbl_log = Label(
-                text="",
+                text=f"Pronto | Pasta: {PASTA_DADOS}\n",
                 size_hint_y=None,
                 halign="left",
                 valign="top",
@@ -599,7 +579,7 @@ if TEM_KIVY:
             )
             self.lbl_log.bind(
                 texture_size=lambda inst, val: setattr(
-                    inst, "height", max(200, val[1] + 20)
+                    inst, "height", max(180, val[1] + 20)
                 )
             )
             self.lbl_log.bind(
@@ -610,8 +590,49 @@ if TEM_KIVY:
             scroll.add_widget(self.lbl_log)
             raiz.add_widget(scroll)
 
-            self.central.autodiagnostico()
             return raiz
+
+        def _iniciar_videochamada(self, _):
+            ok, _num = self.central.iniciar_sessao_midia(self.txt_numero.text, "VIDEO")
+            if not ok:
+                return
+
+            if TEM_KIVY and platform == "android":
+                try:
+                    from android.permissions import Permission, request_permissions
+                    request_permissions([Permission.CAMERA, Permission.RECORD_AUDIO])
+                except Exception as e:
+                    self._append(f"[AVISO PERMISSÃO] {e}")
+
+            self._abrir_camera_na_tela()
+
+        def _abrir_camera_na_tela(self):
+            self._fechar_camera_na_tela()
+            try:
+                cam = Camera(index=0, play=True, resolution=(640, 480))
+                self.camera_widget = cam
+                self.camera_container.height = 220
+                self.camera_container.add_widget(cam)
+                self._append("[CÂMERA] Câmera ativada na tela.")
+            except Exception as e:
+                self._append(f"[ERRO CÂMERA] Não foi possível abrir a câmera: {e}")
+
+        def _fechar_camera_na_tela(self):
+            if self.camera_widget is not None:
+                try:
+                    self.camera_widget.play = False
+                except Exception:
+                    pass
+                self.camera_widget = None
+            self.camera_container.clear_widgets()
+            self.camera_container.height = 0
+
+        def _encerrar_tudo(self, _):
+            self._fechar_camera_na_tela()
+            self.central.desligar_chamada()
+
+        def on_stop(self):
+            self._fechar_camera_na_tela()
 
         def _log_ui(self, msg: str):
             Clock.schedule_once(lambda _: self._append(msg), 0)
